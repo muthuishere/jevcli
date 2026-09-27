@@ -46,6 +46,11 @@ same (0.93 same), extract --kind date (due date, confidence 1.00), pick-func (re
 two failure lines), verify, rank, tree, score, route (act/confirm/escalate, exit 0/10/20), samples (agreement), run.
 A small personal model answered several of these wrongly: the recipes are only as good as the model behind the profile.
 
+## Context layers (v0.5.0, 2026-09-27)
+`jevcli context show|set|clear [--profile P]`, `question add --context`, `ask|judge --context TEXT|@file` (repeat).
+JSON states get a merged `"context"` field instead of a text prefix (the old prefix broke JSON). Live: the same message
+0.84 no context / 0.94 "meeting in 20 min" / 0.64 "in three months".
+
 ## One command, all config (v0.4.0, 2026-09-27)
 Owner direction: no fixed verbs (is / which / feels / match / recipes all removed). One `jevcli ask` with questions
 inline (`--noul/--choice/--score`) or by NAME from config (`jevcli question add|list|show|remove`), every knob in

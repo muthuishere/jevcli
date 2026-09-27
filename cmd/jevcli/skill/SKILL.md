@@ -39,6 +39,21 @@ jevcli ask --states tickets.jsonl team,sev --parallel 8                # batch o
   invalid reply). An error is never a "no". On 4, say the call failed; on 3, check it yourself or ask the user. A batch
   exits 0, or 4 if any input failed (that line carries `"error"`).
 
+## Context: what the model should know
+
+The model sees only the question and the input, so give it the background. The layers are sent in order:
+
+```bash
+jevcli context set "We are a 5-person SaaS; on-call is one engineer."        # global, every call
+jevcli context set @~/notes/team.md --profile jev                            # one profile (a file is re-read each call)
+jevcli question add urgent --noul "Is this urgent?" --context "The reader is the CFO."   # one saved question
+jevcli ask urgent --context "The board meeting starts in 20 minutes." < msg.txt           # this call (TEXT or @file, repeatable)
+jevcli context                                                                # show what is set, and where
+```
+The same message scored 0.84 with no context, 0.94 with "the meeting is in 20 minutes" and 0.64 (unsure) with "the
+meeting is in three months". Pass the facts that decide it. A JSON input keeps its shape: the context goes into its
+`"context"` field.
+
 ## Save questions once, reuse everywhere
 
 ```bash

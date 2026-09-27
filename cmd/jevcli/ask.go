@@ -236,7 +236,8 @@ func cmdAsk(args []string) {
 	no := fs.Float64("no", -1, "override: noul P at or below is no")
 	minC := fs.Float64("min", -1, "override: choice / score confidence below is unsure")
 	par := fs.Int("parallel", 0, "override: concurrent requests in a batch")
-	var nouls, choices, scores multi
+	var nouls, choices, scores, ctxs multi
+	fs.Var(&ctxs, "context", "background for this call: TEXT or @file (repeat); added after the config and profile context")
 	fs.Var(&nouls, "noul", `NAME="QUESTION" (repeat); or NAME="QUESTION|true means|false means"`)
 	fs.Var(&choices, "choice", `NAME="QUESTION|key=desc;key2=desc" (repeat)`)
 	fs.Var(&scores, "score", `NAME="QUESTION|low;mid;high" (repeat, lowest first)`)
@@ -316,7 +317,7 @@ func cmdAsk(args []string) {
 			}
 			inputs, nums = append(inputs, l), append(nums, i+1)
 		}
-		os.Exit(batch(cfg, p, qs, set, inputs, nums))
+		os.Exit(batch(cfg, p, qs, set, inputs, nums, callCtx(ctxs)))
 	}
 
 	// One input.
@@ -328,7 +329,7 @@ func cmdAsk(args []string) {
 	if err != nil {
 		die("input: %v", err)
 	}
-	ans, model, err := askChunks(p, cfg.WithContext(p, state), qs, set)
+	ans, model, err := askChunks(p, cfg.WithContext(p, state, callCtx(ctxs)...), qs, set)
 	if errors.Is(err, core.ErrNeedKey) {
 		die("profile %s needs %s in the environment", name, core.MissingEnv(p))
 	}
@@ -364,7 +365,7 @@ func cmdAsk(args []string) {
 
 // batch asks every question of every input, set.Parallel at a time, and prints one JSONL line per input in input
 // order. A failed input prints its error and the rest go on; it returns 4 if any failed.
-func batch(cfg core.Config, p core.Profile, qs map[string]core.Question, set core.Settings, inputs []string, nums []int) int {
+func batch(cfg core.Config, p core.Profile, qs map[string]core.Question, set core.Settings, inputs []string, nums []int, extra []string) int {
 	type row struct {
 		Line    int            `json:"line"`
 		Input   string         `json:"input"`
@@ -383,7 +384,7 @@ func batch(cfg core.Config, p core.Profile, qs map[string]core.Question, set cor
 			state, err := normState(l)
 			var ans map[string]core.Answer
 			if err == nil {
-				ans, _, err = askChunks(p, cfg.WithContext(p, state), qs, set)
+				ans, _, err = askChunks(p, cfg.WithContext(p, state, extra...), qs, set)
 			}
 			if err != nil {
 				rows[i].Error = err.Error()
@@ -405,6 +406,15 @@ func batch(cfg core.Config, p core.Profile, qs map[string]core.Question, set cor
 		}
 	}
 	return code
+}
+
+// callCtx reads each --context value (TEXT or @file).
+func callCtx(vs []string) []string {
+	var out []string
+	for _, v := range vs {
+		out = append(out, text(v))
+	}
+	return out
 }
 
 func round2(v float64) float64 { return math.Round(v*100) / 100 }
@@ -448,6 +458,7 @@ func cmdQuestion(args []string) {
 		fs := flag.NewFlagSet("question add", flag.ExitOnError)
 		nq, cq, sq := fs.String("noul", "", "a yes/no question"), fs.String("choice", "", "QUESTION|key=desc;..."), fs.String("score", "", "QUESTION|level0;level1;...")
 		yes, no, minC := fs.Float64("yes", -1, "yes at or above"), fs.Float64("no", -1, "no at or below"), fs.Float64("min", -1, "min confidence")
+		qctx := fs.String("context", "", "background for this question only (TEXT or @file, read now)")
 		_ = fs.Parse(args[2:])
 		var q core.Question
 		switch {
@@ -468,6 +479,9 @@ func cmdQuestion(args []string) {
 		}
 		if *minC >= 0 {
 			q.MinConfidence = minC
+		}
+		if *qctx != "" {
+			q.Context = strings.TrimSpace(text(*qctx))
 		}
 		if cfg.Questions == nil {
 			cfg.Questions = map[string]core.Question{}
@@ -553,6 +567,82 @@ func cmdDefaults(args []string) {
 		die("%s: %v", k, err)
 	}
 	*target = ns
+	if prof != "" {
+		cfg.Profiles[prof] = p
+	}
+	if err := core.SaveConfig(cfg); err != nil {
+		die("%v", err)
+	}
+	pr("saved %s", core.ConfigPath())
+}
+
+// cmdContext manages the standing context sent with every call: global, or one profile's.
+//
+//	jevcli context [show]                       what is sent, and from where
+//	jevcli context set TEXT|@file [--profile P] @file stores the path (read at call time, so edits apply)
+//	jevcli context clear [--profile P]
+func cmdContext(args []string) {
+	cfg := core.LoadConfig()
+	prof := ""
+	var rest []string
+	for i := 0; i < len(args); i++ {
+		if args[i] == "--profile" && i+1 < len(args) {
+			prof, i = args[i+1], i+1
+			continue
+		}
+		rest = append(rest, args[i])
+	}
+	ctx, file := &cfg.Context, &cfg.ContextFile
+	var p core.Profile
+	if prof != "" {
+		var ok bool
+		if p, ok = cfg.Profiles[prof]; !ok {
+			die("no profile %q", prof)
+		}
+		ctx, file = &p.Context, &p.ContextFile
+	}
+	if len(rest) == 0 || rest[0] == "show" {
+		show := func(label, c, f string) {
+			if c == "" && f == "" {
+				pr("%-18s (none)", label)
+				return
+			}
+			if c != "" {
+				pr("%-18s %s", label, trunc(c, 200))
+			}
+			if f != "" {
+				pr("%-18s file %s", label, f)
+			}
+		}
+		show("global", cfg.Context, cfg.ContextFile)
+		for _, k := range keys(cfg.Profiles) {
+			if prof == "" || k == prof {
+				show("profile "+k, cfg.Profiles[k].Context, cfg.Profiles[k].ContextFile)
+			}
+		}
+		for _, k := range keys(cfg.Questions) {
+			if c := cfg.Questions[k].Context; c != "" && prof == "" {
+				show("question "+k, c, "")
+			}
+		}
+		return
+	}
+	switch rest[0] {
+	case "set":
+		if len(rest) < 2 {
+			die("usage: jevcli context set TEXT|@file [--profile P]")
+		}
+		v := strings.Join(rest[1:], " ")
+		if strings.HasPrefix(v, "@") {
+			*ctx, *file = "", v[1:]
+		} else {
+			*ctx, *file = v, ""
+		}
+	case "clear":
+		*ctx, *file = "", ""
+	default:
+		die("usage: jevcli context [show] | set TEXT|@file | clear  [--profile P]")
+	}
 	if prof != "" {
 		cfg.Profiles[prof] = p
 	}

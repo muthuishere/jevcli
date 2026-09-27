@@ -44,8 +44,8 @@ func (m *multi) String() string     { return strings.Join(*m, ",") }
 func (m *multi) Set(v string) error { *m = append(*m, v); return nil }
 
 // ask posts one System One request; a profile's API key comes from the environment variable it names.
-func ask(name string, p core.Profile, state string, qs map[string]any) map[string]core.Answer {
-	ans, err := core.Ask(p, core.LoadConfig().WithContext(p, state), qs, 60*time.Second)
+func ask(name string, p core.Profile, state string, qs map[string]any, extra ...string) map[string]core.Answer {
+	ans, err := core.Ask(p, core.LoadConfig().WithContext(p, state, extra...), qs, 60*time.Second)
 	if errors.Is(err, core.ErrNeedKey) {
 		die("profile %s needs %s in the environment (the profile references it): export %s=...", name, core.MissingEnv(p), core.MissingEnv(p))
 	}
@@ -63,8 +63,9 @@ func cmdJudge(args []string) {
 	prop := fs.String("proposal", "", "the agent's final message")
 	prof := fs.String("profile", "", "endpoint profile")
 	js := fs.Bool("json", false, "raw answers")
-	var acts multi
+	var acts, ctxs multi
 	fs.Var(&acts, "action", "one tool call as a short line (repeat)")
+	fs.Var(&ctxs, "context", "background for this call: TEXT or @file (repeat)")
 	_ = fs.Parse(args)
 	if *reqT == "" || *prop == "" {
 		die("usage: jevcli judge --request TEXT --proposal TEXT [--action LINE ...]")
@@ -82,7 +83,7 @@ func cmdJudge(args []string) {
 	}
 	st := core.State(core.Redact(*reqT), core.Redact(*prop), a2)
 	ans := ask(name, p, st, map[string]any{"accepts": core.NoulQ(p, "accepts"), "wanted_more": core.NoulQ(p, "wanted_more"),
-		"reaction": core.ChoiceQ(p, "reaction"), "satisfaction": core.ScoreQ(p, "satisfaction")})
+		"reaction": core.ChoiceQ(p, "reaction"), "satisfaction": core.ScoreQ(p, "satisfaction")}, callCtx(ctxs)...)
 	if *js {
 		b, _ := json.Marshal(ans)
 		pr("%s", b)
@@ -457,7 +458,7 @@ func cmdConfig(args []string) {
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: jevcli ask|question|defaults|judge|profile|stats|install|uninstall|hook|skill|version")
+		fmt.Fprintln(os.Stderr, "usage: jevcli ask|question|context|defaults|judge|profile|stats|install|uninstall|hook|skill|version")
 		os.Exit(2)
 	}
 	a := os.Args[2:]
@@ -468,6 +469,8 @@ func main() {
 		cmdQuestion(a)
 	case "defaults", "settings":
 		cmdDefaults(a)
+	case "context", "ctx":
+		cmdContext(a)
 	case "judge":
 		cmdJudge(a)
 	case "install":

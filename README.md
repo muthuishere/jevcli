@@ -30,6 +30,12 @@ Questions: saved names (`jevcli question add|list|show|remove`), inline `--noul 
 One input prints `NAME VERDICT P` per question (`--json`, `--raw`) and exits 0 yes/decided, 1 no, 3 unsure, 4 error. A
 batch prints JSONL in input order (20 tickets: 8.2 s sequentially, 1.5 s at 8 parallel).
 
+## Context
+`jevcli context set TEXT|@file [--profile P]` (global or per profile; a file is re-read at call time), `jevcli context
+clear`, `jevcli context` (show). Per saved question: `question add NAME ... --context TEXT`. Per call: `ask|judge --context
+TEXT|@file` (repeatable). Order sent: global, profile, call; a question's context goes ahead of its instructions. A JSON
+input keeps its shape: the context is merged into its `"context"` field.
+
 ## Settings
 `jevcli defaults [set|unset KEY VALUE] [--profile P]`: `yes` 0.8, `no` 0.2, `min_confidence` 0.6, `parallel` 8,
 `retries` 3, `timeout_s` 60, `chunk` 32, `ledger` true, `accept_min` 0.35, `more_max` 0.65. The order of precedence is

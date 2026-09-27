@@ -148,6 +148,7 @@ func (c Config) Settings(p Profile) Settings { return Builtin.Over(c.Defaults).O
 type Question struct {
 	Type          string   `json:"type"` // noul | choice | score
 	Instructions  string   `json:"instructions"`
+	Context       string   `json:"context,omitempty"`  // background for this question only, sent ahead of its instructions
 	Criteria      any      `json:"criteria,omitempty"` // noul {true,false} | choice {key: desc} | score [levels]
 	Yes           *float64 `json:"yes,omitempty"`
 	No            *float64 `json:"no,omitempty"`
@@ -156,7 +157,11 @@ type Question struct {
 
 // Wire is the question as the API takes it.
 func (q Question) Wire() map[string]any {
-	m := map[string]any{"type": q.Type, "instructions": q.Instructions}
+	instr := q.Instructions
+	if c := strings.TrimSpace(os.ExpandEnv(q.Context)); c != "" {
+		instr = "Context: " + c + "\n" + instr
+	}
+	m := map[string]any{"type": q.Type, "instructions": instr}
 	if q.Criteria != nil {
 		m["criteria"] = q.Criteria
 	}
@@ -271,7 +276,7 @@ func keys[V any](m map[string]V) []string {
 
 // WithContext prepends the configured standing context (global, then the profile's) to a state. Context is the user's
 // own data in their config: jevcli ships none.
-func (c Config) WithContext(p Profile, state string) string {
+func (c Config) WithContext(p Profile, state string, extra ...string) string {
 	p = p.Expanded()
 	c.Context, c.ContextFile = os.ExpandEnv(c.Context), os.ExpandEnv(c.ContextFile)
 	var parts []string
@@ -285,10 +290,26 @@ func (c Config) WithContext(p Profile, state string) string {
 			}
 		}
 	}
+	for _, e := range extra { // per-call context, most specific last
+		if e = strings.TrimSpace(e); e != "" {
+			parts = append(parts, e)
+		}
+	}
 	if len(parts) == 0 {
 		return state
 	}
-	return "Context: " + strings.Join(parts, "\n") + "\n\n" + state
+	ctx := strings.Join(parts, "\n")
+	// A JSON state keeps its structure: the context goes in as a "context" field (an existing one is kept first).
+	var obj map[string]any
+	if strings.HasPrefix(strings.TrimSpace(state), "{") && json.Unmarshal([]byte(state), &obj) == nil {
+		if old, ok := obj["context"].(string); ok && old != "" {
+			ctx = ctx + "\n" + old
+		}
+		obj["context"] = ctx
+		b, _ := json.Marshal(obj)
+		return string(b)
+	}
+	return "Context: " + ctx + "\n\n" + state
 }
 
 // ---------------------------------------------------------------- System One client
