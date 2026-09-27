@@ -5,7 +5,8 @@
 //	jevcli install [--no-skill] [--no-hook]     skill into Claude Code + Codex, Stop-hook template (inert until enabled)
 //	jevcli uninstall                            remove the skill links and the hook template
 //	jevcli hook enable|disable stop | mode shadow|block | profile NAME | status | review [N] | run stop
-//	jevcli config show | set-endpoint PROFILE URL [MODEL] [KEY_ENV] | default PROFILE
+//	jevcli config show | set-endpoint PROFILE URL [MODEL] | default PROFILE
+//	jevcli profile list | add NAME URL [--model M] [--header 'K: V' ...] [--questions FILE] [--context TEXT] | use NAME | remove NAME | show NAME
 package main
 
 import (
@@ -16,11 +17,11 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
+
 	"path/filepath"
 	"sort"
 	"strings"
-	"syscall"
+
 	"time"
 
 	"github.com/muthuishere/jevcli/core"
@@ -36,22 +37,11 @@ type multi []string
 func (m *multi) String() string     { return strings.Join(*m, ",") }
 func (m *multi) Set(v string) error { *m = append(*m, v); return nil }
 
-// ask posts and, when the profile's key is not in the environment, re-executes jevcli under `sec run <KEY> --` so the key
-// is injected into this process only (never in argv, files or output).
+// ask posts one System One request; a profile's API key comes from the environment variable it names.
 func ask(name string, p core.Profile, state string, qs map[string]any) map[string]core.Answer {
-	ans, err := core.Ask(p, state, qs, 60*time.Second)
+	ans, err := core.Ask(p, core.LoadConfig().WithContext(p, state), qs, 60*time.Second)
 	if errors.Is(err, core.ErrNeedKey) {
-		if os.Getenv("JEVCLI_SEC_WRAPPED") != "" {
-			die("profile %s needs %s and `sec` did not provide it: add it with `sec set %s`", name, p.KeyEnv, p.KeyEnv)
-		}
-		self, _ := os.Executable()
-		sec, lerr := exec.LookPath("sec")
-		if lerr != nil {
-			die("profile %s needs %s in the environment (or the `sec` CLI to inject it)", name, p.KeyEnv)
-		}
-		env := append(os.Environ(), "JEVCLI_SEC_WRAPPED=1")
-		_ = syscall.Exec(sec, append([]string{"sec", "run", p.KeyEnv, "--", self}, os.Args[1:]...), env)
-		die("could not run sec")
+		die("profile %s needs %s in the environment (the profile references it): export %s=...", name, core.MissingEnv(p), core.MissingEnv(p))
 	}
 	if err != nil {
 		die("%v", err)
@@ -66,6 +56,8 @@ func cmdAsk(args []string) {
 	ctx := fs.String("context", "", "facts (- reads stdin)")
 	prof := fs.String("profile", "", "endpoint profile")
 	js := fs.Bool("json", false, "print the raw answer")
+	route := fs.String("route", "", "ACT,CONFIRM thresholds: prints act|confirm|escalate and exits 0|10|20 (confidence-gated routing)")
+	samples := fs.Int("samples", 0, "self-consistency: ask N times with shuffled option order, report agreement")
 	tru := fs.String("true", "", "yes/no: what the true answer means (the question's own context)")
 	fal := fs.String("false", "", "yes/no: what the false answer means")
 	var opts multi
@@ -124,7 +116,37 @@ func cmdAsk(args []string) {
 			qq["criteria"] = crit
 		}
 	}
+	if *samples > 1 && len(opts) > 0 {
+		selfConsistency(name, p, state, qq, *samples)
+		return
+	}
 	a := ask(name, p, state, map[string]any{"q": qq})["q"]
+	if *route != "" { // act when confident, confirm in the middle band, escalate below
+		var actT, confT float64
+		if _, err := fmt.Sscanf(*route, "%g,%g", &actT, &confT); err != nil {
+			die("--route ACT,CONFIRM, e.g. 0.8,0.5")
+		}
+		c := a.P()
+		label := a.Choice
+		if len(opts) > 0 {
+			c = conf(a)
+		} else if c < 0.5 {
+			c, label = 1-c, "false"
+		} else {
+			label = "true"
+		}
+		switch {
+		case c >= actT:
+			pr("act       %s  (%.2f >= %.2f, %s)", label, c, actT, name)
+		case c >= confT:
+			pr("confirm   %s  (%.2f, %s)", label, c, name)
+			os.Exit(10)
+		default:
+			pr("escalate  %s  (%.2f < %.2f, %s)", label, c, confT, name)
+			os.Exit(20)
+		}
+		return
+	}
 	if *js {
 		b, _ := json.Marshal(a)
 		pr("%s", b)
@@ -307,7 +329,7 @@ func cmdHook(args []string) {
 		save()
 		_, p, _ := cfg.Profile(h.Profile)
 		warn := ""
-		if p.KeyEnv != "" {
+		if len(p.Headers) > 0 {
 			warn = "  WARNING: profile " + h.Profile + " uses an API key: every agent turn is sent to that endpoint (and may be billed)."
 		}
 		pr("stop hook enabled (mode %s, profile %s)%s", h.Mode, h.Profile, warn)
@@ -517,15 +539,12 @@ func cmdConfig(args []string) {
 	switch args[0] {
 	case "set-endpoint":
 		if len(args) < 3 {
-			die("usage: jevcli config set-endpoint PROFILE URL [MODEL] [KEY_ENV]")
+			die("usage: jevcli config set-endpoint PROFILE URL [MODEL]  (headers: jevcli profile add … --header 'K: V')")
 		}
 		p := cfg.Profiles[args[1]]
-		p.Endpoint = args[2]
+		p.URL = args[2]
 		if len(args) > 3 {
 			p.Model = args[3]
-		}
-		if len(args) > 4 {
-			p.KeyEnv = args[4]
 		}
 		if p.Model == "" {
 			p.Model = "default"
@@ -567,7 +586,92 @@ func main() {
 		cmdHook(a)
 	case "config":
 		cmdConfig(a)
+	case "profile", "profiles":
+		cmdProfile(a)
+	case "verify", "same", "rank", "find", "extract", "tree", "pick-skill", "pick-func", "run", "score":
+		recipe(os.Args[1], a)
 	default:
 		die("unknown command %q", os.Args[1])
 	}
+}
+
+func cmdProfile(args []string) {
+	cfg := core.LoadConfig()
+	if len(args) == 0 || args[0] == "list" {
+		for _, n := range keys(cfg.Profiles) {
+			p := cfg.Profiles[n]
+			mark := " "
+			if n == cfg.Default {
+				mark = "*"
+			}
+			hs := ""
+			for _, h := range keys(p.Headers) {
+				hs += "  " + h + ": " + p.Headers[h]
+			}
+			pr("%s %-10s %s  model=%s%s", mark, n, p.URL, p.Model, hs)
+		}
+		pr("(* = default; change with: jevcli profile use NAME)")
+		return
+	}
+	need := func(n int, u string) {
+		if len(args) < n {
+			die("usage: jevcli profile %s", u)
+		}
+	}
+	switch args[0] {
+	case "add":
+		need(3, "add NAME URL [--model M] [--header 'K: V' ...] [--questions FILE] [--context TEXT]")
+		fs := flag.NewFlagSet("profile add", flag.ExitOnError)
+		m, q, c := fs.String("model", "default", "model name"), fs.String("questions", "", "question pack JSON"), fs.String("context", "", "standing context for this profile")
+		var hdr multi
+		fs.Var(&hdr, "header", `request header "Name: value" (repeat); reference env vars for secrets: "Authorization: Bearer $JEV_API_KEY"`)
+		_ = fs.Parse(args[3:])
+		hm := map[string]string{}
+		for _, h := range hdr {
+			k, v, ok := strings.Cut(h, ":")
+			if !ok {
+				die("header %q: want \"Name: value\"", h)
+			}
+			hm[strings.TrimSpace(k)] = strings.TrimSpace(v)
+		}
+		cfg.Profiles[args[1]] = core.Profile{URL: args[2], Model: *m, Headers: hm, Questions: *q, Context: *c}
+		if ph, ok := cfg.Profiles["default"]; ok && ph.URL == "" && args[1] != "default" {
+			delete(cfg.Profiles, "default") // the seeded placeholder is replaced by the first real profile
+		}
+		if cfg.Default == "" || cfg.Profiles[cfg.Default].URL == "" {
+			cfg.Default = args[1]
+		}
+	case "use":
+		need(2, "use NAME")
+		if _, ok := cfg.Profiles[args[1]]; !ok {
+			die("no profile %q", args[1])
+		}
+		cfg.Default = args[1]
+	case "remove":
+		need(2, "remove NAME")
+		delete(cfg.Profiles, args[1])
+		if cfg.Default == args[1] {
+			cfg.Default = ""
+		}
+	case "show":
+		need(2, "show NAME")
+		b, _ := json.MarshalIndent(cfg.Profiles[args[1]], "", "  ")
+		pr("%s", b)
+		return
+	default:
+		die("usage: jevcli profile list | add | use | remove | show")
+	}
+	if err := core.SaveConfig(cfg); err != nil {
+		die("%v", err)
+	}
+	pr("saved %s (default: %s)", core.ConfigPath(), cfg.Default)
+}
+
+func keys[V any](m map[string]V) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }

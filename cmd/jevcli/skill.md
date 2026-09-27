@@ -30,6 +30,25 @@ jevcli ask "<yes/no question>" --context "<facts>" --true "<what yes means>" --f
 **Trust rule**: act on a choice only if `confidence >= 0.6`; on a yes/no only if `P(yes) >= 0.8` or `<= 0.2`. Otherwise
 ask the user and include the lean in one line ("jevcli leans stop, 0.51"). When you act on it, say so in your report.
 
+## Cookbook recipes (all use the same profiles)
+
+| command | use it for |
+|---|---|
+| `jevcli ask Q --option k=desc ... [--route 0.8,0.5] [--samples 5]` | classify / route; `--route` prints act, confirm or escalate (exit 0/10/20); `--samples` checks self-consistency |
+| `jevcli verify --claim TEXT --source @file` | is a claim or citation supported by the source |
+| `jevcli same --a TEXT --b TEXT --what "customer record"` | are two records the same entity (dedupe, alignment) |
+| `jevcli rank --query TEXT --candidates FILE [--dimension TEXT ...]` | re-rank search results; several dimensions = composite score |
+| `jevcli find QUERY FILE [--min 0.6]` | semantic grep, one question per line |
+| `jevcli extract --text @file --what "the due date" --kind date` | pick a value among candidates parsed from the text (date, number, money, email, url) |
+| `jevcli tree --text TEXT --taxonomy tax.json` | hierarchical classification, level by level |
+| `jevcli score --text TEXT --question Q --level L0 --level L1 ...` | ordinal rating |
+| `jevcli pick-skill TASK` / `jevcli pick-func REQUEST --functions f.json` | which skill to load / which function to call |
+| `jevcli run request.json` | any raw System One request (many questions for one state) |
+
+Profiles: `jevcli profile list | use NAME | add NAME URL --model M --header "Authorization: Bearer $VAR"`. `$VAR` is
+expanded at runtime in every profile field (url, model, headers, context, paths); a profile's `context` is prepended to
+every state it sends.
+
 ## Never
 - As a safety gate: permission prompts, the user's rules and money / legal / irreversible calls stay with the user.
 - Pasting secrets into `--context` / `--proposal` (jevcli redacts common key shapes; do not rely on it).

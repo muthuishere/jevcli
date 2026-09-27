@@ -41,6 +41,7 @@ type Questions struct {
 }
 
 func questions(p Profile) Questions {
+	p = p.Expanded()
 	raw := questionsJSON
 	if p.Questions != "" {
 		b, err := os.ReadFile(expand(p.Questions))
@@ -66,14 +67,36 @@ func expand(p string) string {
 
 // ---------------------------------------------------------------- config
 
-// Profile is one endpoint. KeyEnv names the env var holding its bearer token; the value is never stored: it comes from
-// the environment or is injected by `sec run <KeyEnv> -- jevcli …` (jevcli re-executes itself that way when needed).
+// Profile is one endpoint: url, model and request headers. Secrets are never stored: a header value names an env var
+// ("Bearer $JEV_API_KEY") that is expanded only when a request is sent.
 type Profile struct {
-	Endpoint string `json:"endpoint"`
-	Model    string `json:"model"`
-	KeyEnv    string `json:"key_env,omitempty"`
-	Questions string `json:"questions,omitempty"` // optional question pack (JSON) for a model trained on specific wording
-	Note      string `json:"note,omitempty"`
+	URL         string            `json:"url"`
+	Model       string            `json:"model"`
+	Headers     map[string]string `json:"headers,omitempty"`      // values may reference env vars ("Bearer $JEV_API_KEY"), expanded per request
+	Questions   string            `json:"questions,omitempty"`    // optional question pack (JSON) for a model trained on specific wording
+	Context     string            `json:"context,omitempty"`      // standing context prepended to every state sent to this profile
+	ContextFile string            `json:"context_file,omitempty"` // same, read from a file
+	Note        string            `json:"note,omitempty"`
+	Endpoint    string            `json:"endpoint,omitempty"` // legacy name for url
+	KeyEnv      string            `json:"key_env,omitempty"`  // legacy: same as headers {"Authorization": "Bearer $KEY_ENV"}
+}
+
+// Norm folds the legacy fields into url + headers.
+func (p Profile) Norm() Profile {
+	if p.URL == "" {
+		p.URL = p.Endpoint
+	}
+	p.Endpoint = ""
+	if p.KeyEnv != "" {
+		if p.Headers == nil {
+			p.Headers = map[string]string{}
+		}
+		if _, ok := p.Headers["Authorization"]; !ok {
+			p.Headers["Authorization"] = "Bearer $" + p.KeyEnv
+		}
+		p.KeyEnv = ""
+	}
+	return p
 }
 
 type HookCfg struct {
@@ -83,9 +106,11 @@ type HookCfg struct {
 }
 
 type Config struct {
-	Default  string             `json:"default_profile"`
-	Profiles map[string]Profile `json:"profiles"`
-	Hooks    map[string]HookCfg `json:"hooks"`
+	Default     string             `json:"default_profile"`
+	Context     string             `json:"context,omitempty"` // standing context for every profile (before the profile's own)
+	ContextFile string             `json:"context_file,omitempty"`
+	Profiles    map[string]Profile `json:"profiles"`
+	Hooks       map[string]HookCfg `json:"hooks"`
 }
 
 func Home() string { h, _ := os.UserHomeDir(); return h }
@@ -101,29 +126,31 @@ func DefaultConfig() Config {
 	return Config{
 		Default: "default",
 		Profiles: map[string]Profile{
-			"default": {Endpoint: "", Model: "", KeyEnv: "", Note: "set with: jevcli config set-endpoint default URL [MODEL] [KEY_ENV]"},
+			"default": {URL: "", Model: "", Note: "set with: jevcli profile add NAME URL --model M --header 'Authorization: Bearer $VAR'"},
 		},
 		Hooks: map[string]HookCfg{"stop": {Enabled: false, Mode: "shadow", Profile: "default"}},
 	}
 }
 
+// LoadConfig reads the user's config; the built-in profiles only seed a config that does not exist yet.
 func LoadConfig() Config {
-	c := DefaultConfig()
 	b, err := os.ReadFile(ConfigPath())
 	if err != nil {
-		return c
+		return DefaultConfig()
 	}
-	var f Config
-	if json.Unmarshal(b, &f) == nil {
-		if f.Default != "" {
-			c.Default = f.Default
-		}
-		for k, v := range f.Profiles {
-			c.Profiles[k] = v
-		}
-		for k, v := range f.Hooks {
-			c.Hooks[k] = v
-		}
+	var c Config
+	if json.Unmarshal(b, &c) != nil {
+		fmt.Fprintf(os.Stderr, "jevcli: %s is not valid JSON; using built-in defaults\n", ConfigPath())
+		return DefaultConfig()
+	}
+	if c.Profiles == nil {
+		c.Profiles = map[string]Profile{}
+	}
+	for k, p := range c.Profiles {
+		c.Profiles[k] = p.Norm()
+	}
+	if c.Hooks == nil {
+		c.Hooks = DefaultConfig().Hooks
 	}
 	return c
 }
@@ -142,8 +169,8 @@ func (c Config) Profile(name string) (string, Profile, error) {
 	if !ok {
 		return name, p, fmt.Errorf("no profile %q (have: %s)", name, strings.Join(keys(c.Profiles), ", "))
 	}
-	if p.Endpoint == "" {
-		return name, p, fmt.Errorf("profile %q has no endpoint: jevcli config set-endpoint %s URL [MODEL] [KEY_ENV]", name, name)
+	if p.URL == "" {
+		return name, p, fmt.Errorf("profile %q has no url: jevcli profile add %s URL --model M [--header 'K: V']", name, name)
 	}
 	return name, p, nil
 }
@@ -155,6 +182,28 @@ func keys[V any](m map[string]V) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// WithContext prepends the configured standing context (global, then the profile's) to a state. Context is the user's
+// own data in their config: jevcli ships none.
+func (c Config) WithContext(p Profile, state string) string {
+	p = p.Expanded()
+	c.Context, c.ContextFile = os.ExpandEnv(c.Context), os.ExpandEnv(c.ContextFile)
+	var parts []string
+	for _, pair := range [][2]string{{c.Context, c.ContextFile}, {p.Context, p.ContextFile}} {
+		if pair[0] != "" {
+			parts = append(parts, strings.TrimSpace(pair[0]))
+		}
+		if pair[1] != "" {
+			if b, err := os.ReadFile(expand(pair[1])); err == nil {
+				parts = append(parts, strings.TrimSpace(string(b)))
+			}
+		}
+	}
+	if len(parts) == 0 {
+		return state
+	}
+	return "Context: " + strings.Join(parts, "\n") + "\n\n" + state
 }
 
 // ---------------------------------------------------------------- System One client
@@ -171,18 +220,53 @@ type Answer struct {
 
 var ErrNeedKey = errors.New("need key")
 
-// Ask posts one System One request. A profile with KeyEnv whose value is not in the environment returns ErrNeedKey, and
-// main re-executes jevcli under `sec run <KeyEnv> --` so the key never touches argv, files or logs.
-func Ask(p Profile, state string, qs map[string]any, timeout time.Duration) (map[string]Answer, error) {
-	body, _ := json.Marshal(map[string]any{"model": p.Model, "state": state, "questions": qs})
-	req, _ := http.NewRequest("POST", p.Endpoint, bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	if p.KeyEnv != "" {
-		k := os.Getenv(p.KeyEnv)
-		if k == "" {
-			return nil, ErrNeedKey
+var envRef = regexp.MustCompile(`\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?`)
+
+// fields are every profile value that may hold $VAR references (expanded at runtime, stored raw).
+func (p Profile) fields() []string {
+	f := []string{p.URL, p.Model, p.Questions, p.Context, p.ContextFile}
+	for _, v := range p.Headers {
+		f = append(f, v)
+	}
+	return f
+}
+
+// MissingEnv returns the first env var any profile value references that is not set ("" = all set).
+func MissingEnv(p Profile) string {
+	for _, v := range p.fields() {
+		for _, m := range envRef.FindAllStringSubmatch(v, -1) {
+			if os.Getenv(m[1]) == "" {
+				return m[1]
+			}
 		}
-		req.Header.Set("Authorization", "Bearer "+k)
+	}
+	return ""
+}
+
+// Expanded returns the profile with every $VAR expanded from the environment (runtime only; never saved).
+func (p Profile) Expanded() Profile {
+	p = p.Norm()
+	e := os.ExpandEnv
+	p.URL, p.Model, p.Questions, p.Context, p.ContextFile = e(p.URL), e(p.Model), e(p.Questions), e(p.Context), e(p.ContextFile)
+	h := map[string]string{}
+	for k, v := range p.Headers {
+		h[k] = e(v)
+	}
+	p.Headers = h
+	return p
+}
+
+// Ask posts one System One request to the profile's url with its headers (env vars expanded here, never stored).
+func Ask(p Profile, state string, qs map[string]any, timeout time.Duration) (map[string]Answer, error) {
+	if MissingEnv(p.Norm()) != "" {
+		return nil, ErrNeedKey
+	}
+	p = p.Expanded()
+	body, _ := json.Marshal(map[string]any{"model": p.Model, "state": state, "questions": qs})
+	req, _ := http.NewRequest("POST", p.URL, bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	for k, v := range p.Headers {
+		req.Header.Set(k, v)
 	}
 	resp, err := (&http.Client{Timeout: timeout}).Do(req)
 	if err != nil {
@@ -191,7 +275,7 @@ func Ask(p Profile, state string, qs map[string]any, timeout time.Duration) (map
 	defer resp.Body.Close()
 	raw, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode/100 != 2 {
-		return nil, fmt.Errorf("%s: HTTP %d: %s", p.Endpoint, resp.StatusCode, strings.TrimSpace(string(raw))[:min(300, len(strings.TrimSpace(string(raw))))])
+		return nil, fmt.Errorf("%s: HTTP %d: %s", p.URL, resp.StatusCode, strings.TrimSpace(string(raw))[:min(300, len(strings.TrimSpace(string(raw))))])
 	}
 	var out struct {
 		Answers map[string]Answer `json:"answers"`
@@ -441,7 +525,7 @@ func Verdict(cfg Config, h HookCfg, in HookInput) (logRec map[string]any, blockR
 	}
 	st := State(req, text, acts)
 	t0 := time.Now()
-	ans, err := Ask(p, st, map[string]any{"accepts": NoulQ(p, "accepts"), "wanted_more": NoulQ(p, "wanted_more")}, 12*time.Second)
+	ans, err := Ask(p, cfg.WithContext(p, st), map[string]any{"accepts": NoulQ(p, "accepts"), "wanted_more": NoulQ(p, "wanted_more")}, 12*time.Second)
 	rec["ms"] = time.Since(t0).Milliseconds()
 	if err != nil {
 		rec["error"] = err.Error()
@@ -457,7 +541,7 @@ func Verdict(cfg Config, h HookCfg, in HookInput) (logRec map[string]any, blockR
 	}
 	rec["accept"], rec["wanted_more"], rec["would_block"], rec["why"] = acc, more, len(why) > 0, why
 	rec["state"] = st
-	if p.KeyEnv != "" {
+	if len(p.Headers) > 0 {
 		rec["third_party"] = true // answered by a hosted Jev: never use as training data (its terms)
 	}
 	block := len(why) > 0 && h.Mode == "block" && !in.StopHookActive

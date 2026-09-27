@@ -16,10 +16,24 @@ judged. `judge` asks four turn-level questions from a **question pack** (JSON). 
 point to its own pack (`"questions": "/path/pack.json"`), which matters for a model trained on specific wording.
 
 ## Profiles
-`~/.config/jevcli/config.json` holds named profiles (`endpoint`, `model`, optional `key_env`, optional `questions`) and a
-`default_profile`. Keys are never stored: a profile names an environment variable; if it is not set and the
-`sec` secret broker is on PATH, jevcli re-runs itself under `sec run KEY_ENV --` so the value
-reaches only this process.
+`~/.config/jevcli/config.json`: named profiles and a `default_profile`. A profile is `url`, `model`, `headers`, plus
+optional `questions` (a question pack) and `context` / `context_file` (standing context prepended to every state).
+`$VAR` / `${VAR}` in any of these is expanded from the environment at request time and never written back, so secrets
+stay in the environment: `--header "Authorization: Bearer $JEV_API_KEY"`.
+
+```bash
+jevcli profile add hosted https://example.com/v1/systemone --model some-model --header "Authorization: Bearer $JEV_API_KEY"
+jevcli profile add local 'http://$JEV_HOST/v1/systemone' --model my-model --context "Decisions are for the platform team."
+jevcli profile use local        # the default profile
+jevcli profile list
+```
+
+## Cookbook recipes
+`ask` (classify / route; `--route ACT,CONFIRM` for confidence-gated routing, `--samples N` for self-consistency),
+`verify` (citations, fact checks), `same` (entity alignment, dedupe), `rank` (re-ranking, composite scores), `find`
+(semantic grep), `extract` (pre-parsed value extraction: dates, numbers, money, emails, urls), `tree` (hierarchical
+classification), `score` (ordinal rating), `pick-skill` (agent skill suggestion), `pick-func` (function calling),
+`run` (raw requests: batching, speculative fan-out, structure recovery). Each is plain System One questions.
 
 ## Agents
 `jevcli install` writes a skill for Claude Code and Codex, and adds a Stop-hook template to Claude Code's settings.
