@@ -21,7 +21,7 @@ returned. `askMany` splits a request into chunks of 32 questions (servers cap qu
 | `core/core.go` | config + profiles, System One client (`Ask`, `LastRaw`), `$VAR` runtime expansion, standing context, secret redaction, turn parser for Claude Code transcripts, Stop-hook verdict, settings.json hook template |
 | `core/questions.json` | built-in neutral question pack for `judge` (ids: accepts, wanted_more, reaction, satisfaction) |
 | `cmd/jevcli/main.go` | ask, judge, query, install / uninstall, hook, config, profile |
-| `cmd/jevcli/recipes.go` | cookbook recipes: verify, same, rank, find, extract, tree, score, pick-skill, pick-func, run; `ask --route`, `ask --samples` |
+| `cmd/jevcli/ask.go` | ask (named + inline questions, one input or a parallel batch, verdicts, exit codes), question, defaults |
 | `cmd/jevcli/skill/SKILL.md` | **the product**: the agent skill (is / which / ask / judge, when to reach for it, the trust rule). `jevcli install` writes it to ~/.claude, ~/.agents, ~/.codex; `jevcli skill` prints it |
 
 Build: `go build -o bin/jevcli ./cmd/jevcli` (Go 1.26, stdlib only). Installed copy on the Mac:
@@ -45,6 +45,13 @@ a row (`stop_hook_active`), fails open. `jevcli hook review` pairs verdicts with
 same (0.93 same), extract --kind date (due date, confidence 1.00), pick-func (refund_payment, 1.00), find (exactly the
 two failure lines), verify, rank, tree, score, route (act/confirm/escalate, exit 0/10/20), samples (agreement), run.
 A small personal model answered several of these wrongly: the recipes are only as good as the model behind the profile.
+
+## One command, all config (v0.4.0, 2026-09-27)
+Owner direction: no fixed verbs (is / which / feels / match / recipes all removed). One `jevcli ask` with questions
+inline (`--noul/--choice/--score`) or by NAME from config (`jevcli question add|list|show|remove`), every knob in
+`core.Settings` with defaults (`jevcli defaults`, precedence builtin < config < profile < question < flag). Code:
+`cmd/jevcli/ask.go`. Verdicts: yes/no/unsure, key/unsure, level/unsure. Checked live: urgent,team,sev on one ticket ->
+yes 0.95 / billing 0.87 / high 0.99, exit 0.
 
 ## Reliability (v0.3.0, 2026-09-27), from the ecosystem scan
 - Exit codes: 0 yes, 1 no, 3 unsure (`is` band 0.2/0.8, `which --min 0.6`), 4 any error. `die` exits 4, never 1.

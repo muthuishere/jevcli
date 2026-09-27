@@ -19,7 +19,6 @@ import (
 	"io"
 	iofs "io/fs"
 	"os"
-	"sync"
 
 	"path/filepath"
 	"sort"
@@ -58,142 +57,6 @@ func ask(name string, p core.Profile, state string, qs map[string]any) map[strin
 
 func pr(f string, a ...any) { fmt.Printf(f+"\n", a...) }
 
-func cmdAsk(args []string) {
-	fs := flag.NewFlagSet("ask", flag.ExitOnError)
-	ctx := fs.String("context", "", "facts (- reads stdin)")
-	prof := fs.String("profile", "", "endpoint profile")
-	js := fs.Bool("json", false, "print the raw answer")
-	route := fs.String("route", "", "ACT,CONFIRM thresholds: prints act|confirm|escalate and exits 0|10|20 (confidence-gated routing)")
-	samples := fs.Int("samples", 0, "self-consistency: ask N times with shuffled option order, report agreement")
-	tru := fs.String("true", "", "yes/no: what the true answer means (the question's own context)")
-	fal := fs.String("false", "", "yes/no: what the false answer means")
-	var opts multi
-	fs.Var(&opts, "option", "KEY=DESCRIPTION (repeat; none = yes/no)")
-	// the question may come before, between or after the flags
-	q, rest := firstPositional(args)
-	_ = fs.Parse(rest)
-	for fs.NArg() > 0 {
-		if q == "" {
-			q = fs.Arg(0)
-		}
-		_ = fs.Parse(fs.Args()[1:])
-	}
-	if q == "" {
-		die("usage: jevcli ask QUESTION [--context TEXT] [--option KEY=DESC ...]")
-	}
-	cfg := core.LoadConfig()
-	name, p, err := cfg.Profile(*prof)
-	if err != nil {
-		die("%v", err)
-	}
-	c := *ctx
-	if c == "-" {
-		b, _ := io.ReadAll(os.Stdin)
-		c = string(b)
-	}
-	state := core.Redact(strings.TrimSpace(c))
-	if state == "" {
-		state = q
-	}
-	var qq map[string]any
-	if len(opts) > 0 {
-		crit := map[string]string{}
-		for _, o := range opts {
-			k, v, ok := strings.Cut(o, "=")
-			if !ok {
-				v = k
-			}
-			crit[strings.TrimSpace(k)] = strings.TrimSpace(v)
-		}
-		if len(crit) < 2 {
-			die("give at least two --option KEY=DESCRIPTION")
-		}
-		qq = map[string]any{"type": "choice", "instructions": q, "criteria": crit}
-	} else {
-		// a noul is instructions + criteria that carry the context; without --true/--false it is a bare instruction
-		crit := map[string]string{}
-		if *tru != "" {
-			crit["true"] = *tru
-		}
-		if *fal != "" {
-			crit["false"] = *fal
-		}
-		qq = map[string]any{"type": "noul", "instructions": q}
-		if len(crit) > 0 {
-			qq["criteria"] = crit
-		}
-	}
-	if *samples > 1 && len(opts) > 0 {
-		selfConsistency(name, p, state, qq, *samples)
-		return
-	}
-	a := ask(name, p, state, map[string]any{"q": qq})["q"]
-	if *route != "" { // act when confident, confirm in the middle band, escalate below
-		var actT, confT float64
-		if _, err := fmt.Sscanf(*route, "%g,%g", &actT, &confT); err != nil {
-			die("--route ACT,CONFIRM, e.g. 0.8,0.5")
-		}
-		c := a.P()
-		label := a.Choice
-		if len(opts) > 0 {
-			c = conf(a)
-		} else if c < 0.5 {
-			c, label = 1-c, "false"
-		} else {
-			label = "true"
-		}
-		switch {
-		case c >= actT:
-			pr("act       %s  (%.2f >= %.2f, %s)", label, c, actT, name)
-		case c >= confT:
-			pr("confirm   %s  (%.2f, %s)", label, c, name)
-			os.Exit(10)
-		default:
-			pr("escalate  %s  (%.2f < %.2f, %s)", label, c, confT, name)
-			os.Exit(20)
-		}
-		return
-	}
-	if *js {
-		b, _ := json.Marshal(a)
-		pr("%s", b)
-		return
-	}
-	if len(opts) > 0 {
-		conf := 0.0
-		if a.Confidence != nil {
-			conf = *a.Confidence
-		}
-		pr("%s  (confidence %.2f, %s)", a.Choice, conf, name)
-		type kv struct {
-			k string
-			v float64
-		}
-		var l []kv
-		for k, v := range a.Probabilities {
-			l = append(l, kv{k, v})
-		}
-		sort.Slice(l, func(i, j int) bool { return l[i].v > l[j].v })
-		for _, x := range l {
-			pr("  %.2f  %s", x.v, x.k)
-		}
-		return
-	}
-	verdict := "false"
-	if a.P() >= 0.5 {
-		verdict = "true"
-	}
-	pr("%s  (P(true) %.2f, %s)", verdict, a.P(), name)
-}
-
-// firstPositional lets the question come before the flags, as in `jevcli ask "Q" --option ...`.
-func firstPositional(args []string) (string, []string) {
-	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
-		return args[0], args[1:]
-	}
-	return "", args
-}
-
 func cmdJudge(args []string) {
 	fs := flag.NewFlagSet("judge", flag.ExitOnError)
 	reqT := fs.String("request", "", "the user's request")
@@ -211,6 +74,8 @@ func cmdJudge(args []string) {
 	if err != nil {
 		die("%v", err)
 	}
+	set := cfg.Settings(p)
+	core.Retries, core.LedgerOn = *set.Retries, *set.Ledger
 	var a2 []string
 	for _, a := range acts {
 		a2 = append(a2, core.Redact(a))
@@ -592,21 +457,17 @@ func cmdConfig(args []string) {
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: jevcli is|which|ask|judge|profile|install|uninstall|hook|skill|version")
+		fmt.Fprintln(os.Stderr, "usage: jevcli ask|question|defaults|judge|profile|stats|install|uninstall|hook|skill|version")
 		os.Exit(2)
 	}
 	a := os.Args[2:]
 	switch os.Args[1] {
-	case "ask":
-		if hasAny(a, "--option", "-option", "--true", "--route", "--samples") { // the older options form
-			cmdAsk(a)
-		} else {
-			cmdQuery(a)
-		}
-	case "is":
-		recipe("feels", a)
-	case "which":
-		recipe("match", a)
+	case "ask", "a":
+		cmdAsk(a)
+	case "question", "questions", "q":
+		cmdQuestion(a)
+	case "defaults", "settings":
+		cmdDefaults(a)
 	case "judge":
 		cmdJudge(a)
 	case "install":
@@ -624,12 +485,8 @@ func main() {
 	case "skill", "cookbook":
 		b, _ := skillFS.ReadFile("skill/SKILL.md")
 		os.Stdout.Write(b)
-	case "query", "q":
-		cmdQuery(a)
 	case "profile", "profiles":
 		cmdProfile(a)
-	case "feels", "match", "verify", "same", "rank", "find", "extract", "tree", "pick-skill", "pick-func", "run", "score":
-		recipe(os.Args[1], a)
 	default:
 		die("unknown command %q", os.Args[1])
 	}
@@ -718,208 +575,6 @@ func keys[V any](m map[string]V) []string {
 
 // cmdQuery is the native System One call: one state (plain text or a JSON object, sent as its JSON text), many named
 // questions. It prints the answers the way the API returns them; --raw prints the whole response (model, usage, id).
-// batchIn holds --lines input, already turned into JSONL.
-var batchIn string
-
-func cmdQuery(args []string) {
-	fs := flag.NewFlagSet("query", flag.ExitOnError)
-	st, prof, raw := fs.String("state", "", "the state: text, a JSON object, @file or -"), fs.String("profile", "", "endpoint profile"), fs.Bool("raw", false, "print the full response")
-	states, qfile := fs.String("states", "", "batch: a JSONL file (or -) with one state per line; prints one JSONL answer line per state"), fs.String("questions", "", "a question-set file: JSON object of NAME -> {type, instructions, criteria}")
-	par := fs.Int("parallel", 4, "batch: concurrent requests")
-	var nouls, choices, scores multi
-	fs.Var(&nouls, "noul", `NAME=INSTRUCTIONS (repeat); optional criteria: NAME="INSTR|true text|false text"`)
-	fs.Var(&choices, "choice", `NAME="INSTRUCTIONS|key=desc;key2=desc2" (repeat)`)
-	fs.Var(&scores, "score", `NAME="INSTRUCTIONS|level0;level1;level2" (repeat, lowest first)`)
-	fs.Var(&nouls, "is", `NAME="QUESTION" (repeat): a yes/no, answered as P(yes)`)
-	fs.Var(&choices, "which", `NAME="QUESTION|key=desc;key2=desc2" (repeat): pick one key`)
-	fs.StringVar(st, "in", "", "one input: text, a JSON object, @file or -")
-	linesF := fs.String("lines", "", "batch: a text file (or -), one input per line")
-	_ = fs.Parse(args)
-	if *linesF != "" {
-		in := *linesF
-		if in != "-" {
-			in = "@" + strings.TrimPrefix(in, "@")
-		}
-		var b strings.Builder
-		for _, l := range strings.Split(text(in), "\n") {
-			if strings.TrimSpace(l) != "" {
-				j, _ := json.Marshal(l)
-				b.Write(append(j, '\n'))
-			}
-		}
-		*states, *linesF = "-", ""
-		batchIn = b.String()
-	}
-	if (*st == "") == (*states == "") || len(nouls)+len(choices)+len(scores) == 0 && *qfile == "" {
-		die("usage: jevcli query --state TEXT|JSON|@file | --states FILE.jsonl  --noul NAME=INSTRUCTIONS [...] [--questions set.json]")
-	}
-	split := func(spec string) (string, []string) {
-		name, rest, ok := strings.Cut(spec, "=")
-		if !ok || strings.TrimSpace(name) == "" {
-			die("want NAME=INSTRUCTIONS, got %q", spec)
-		}
-		return strings.TrimSpace(name), strings.Split(rest, "|")
-	}
-	qs := map[string]any{}
-	if *qfile != "" {
-		if err := json.Unmarshal([]byte(text("@"+*qfile)), &qs); err != nil {
-			die("--questions %s: want a JSON object of NAME -> question: %v", *qfile, err)
-		}
-	}
-	for _, n := range nouls {
-		name, parts := split(n)
-		q := map[string]any{"type": "noul", "instructions": strings.TrimSpace(parts[0])}
-		if len(parts) == 3 {
-			q["criteria"] = map[string]string{"true": strings.TrimSpace(parts[1]), "false": strings.TrimSpace(parts[2])}
-		}
-		qs[name] = q
-	}
-	for _, c := range choices {
-		name, parts := split(c)
-		if len(parts) != 2 {
-			die("--choice %s: want \"INSTRUCTIONS|key=desc;key2=desc2\"", name)
-		}
-		crit := map[string]string{}
-		for _, o := range strings.Split(parts[1], ";") {
-			k, v, _ := strings.Cut(o, "=")
-			if v == "" {
-				v = k
-			}
-			crit[strings.TrimSpace(k)] = strings.TrimSpace(v)
-		}
-		qs[name] = map[string]any{"type": "choice", "instructions": strings.TrimSpace(parts[0]), "criteria": crit}
-	}
-	for _, sc := range scores {
-		name, parts := split(sc)
-		if len(parts) != 2 {
-			die("--score %s: want \"INSTRUCTIONS|level0;level1\"", name)
-		}
-		var lv []string
-		for _, l := range strings.Split(parts[1], ";") {
-			lv = append(lv, strings.TrimSpace(l))
-		}
-		qs[name] = map[string]any{"type": "score", "instructions": strings.TrimSpace(parts[0]), "criteria": lv}
-	}
-	name, p := resolve(*prof)
-	if *states != "" {
-		in := *states
-		if in != "-" {
-			in = "@" + strings.TrimPrefix(in, "@")
-		}
-		if batchIn != "" {
-			queryBatch(name, p, batchIn, qs, *par)
-			return
-		}
-		queryBatch(name, p, text(in), qs, *par)
-		return
-	}
-	if !*raw {
-		j, _ := json.Marshal(text(*st))
-		queryBatch(name, p, string(j), qs, 1)
-		return
-	}
-	state, err := normState(text(*st))
-	if err != nil {
-		die("--state: %v", err)
-	}
-	ans := askMany(name, p, state, qs)
-	if *raw && len(qs) <= 32 {
-		var v any
-		_ = json.Unmarshal(core.LastRaw, &v)
-		b, _ := json.MarshalIndent(v, "", "  ")
-		pr("%s", b)
-		return
-	}
-	var model any
-	if len(core.LastRaw) > 0 {
-		var v map[string]any
-		_ = json.Unmarshal(core.LastRaw, &v)
-		model = v["model"]
-	}
-	b, _ := json.MarshalIndent(map[string]any{"profile": name, "model": model, "answers": ans}, "", "  ")
-	pr("%s", b)
-}
-
-// normState trims a state; a structured state travels as its compact JSON text, as the API expects.
-func normState(s string) (string, error) {
-	s = strings.TrimSpace(s)
-	if !strings.HasPrefix(s, "{") {
-		return s, nil
-	}
-	var v any
-	if json.Unmarshal([]byte(s), &v) != nil {
-		return "", errors.New("looks like JSON but does not parse")
-	}
-	b, _ := json.Marshal(v)
-	return string(b), nil
-}
-
-// queryBatch asks the same questions of every state in a JSONL input (a JSON object, or a JSON string for a text state,
-// per line; blank lines skipped), par requests at a time, and prints one JSONL line per state in input order. A failed
-// line prints its error and the batch goes on; the exit code is 1 if any line failed.
-func queryBatch(name string, p core.Profile, in string, qs map[string]any, par int) {
-	type row struct {
-		Line    int                    `json:"line"`
-		Input   string                 `json:"input,omitempty"`
-		Model   any                    `json:"model,omitempty"`
-		Answers map[string]core.Answer `json:"answers,omitempty"`
-		Error   string                 `json:"error,omitempty"`
-	}
-	var lines []string
-	var nums []int
-	for i, l := range strings.Split(in, "\n") {
-		if l = strings.TrimSpace(l); l != "" {
-			lines, nums = append(lines, l), append(nums, i+1)
-		}
-	}
-	rows := make([]row, len(lines))
-	sem := make(chan struct{}, max(1, par))
-	var wg sync.WaitGroup
-	for i, l := range lines {
-		wg.Add(1)
-		sem <- struct{}{}
-		go func() {
-			defer func() { <-sem; wg.Done() }()
-			rows[i] = row{Line: nums[i]}
-			var s string
-			if strings.HasPrefix(l, `"`) && json.Unmarshal([]byte(l), &s) == nil {
-				l = s
-			}
-			rows[i].Input = trunc(l, 120)
-			state, err := normState(l)
-			if err == nil {
-				rows[i].Answers, rows[i].Model, err = askManyErr(p, core.LoadConfig().WithContext(p, state), qs)
-			}
-			if errors.Is(err, core.ErrNeedKey) {
-				err = fmt.Errorf("profile %s needs %s in the environment", name, core.MissingEnv(p))
-			}
-			if err != nil {
-				rows[i].Error = err.Error()
-			}
-		}()
-	}
-	wg.Wait()
-	failed := false
-	for _, r := range rows {
-		b, _ := json.Marshal(r)
-		pr("%s", b)
-		failed = failed || r.Error != ""
-	}
-	if failed {
-		os.Exit(1)
-	}
-}
-
-func hasAny(args []string, flags ...string) bool {
-	for _, a := range args {
-		for _, f := range flags {
-			if a == f || strings.HasPrefix(a, f+"=") {
-				return true
-			}
-		}
-	}
-	return false
-}
 
 // cmdStats summarises the call ledger: calls, errors, tokens and latency per day and host.
 func cmdStats(args []string) {

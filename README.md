@@ -6,9 +6,11 @@ with a number or a key, and saves its own reasoning for the real work. The skill
 [`cmd/jevcli/skill/SKILL.md`](cmd/jevcli/skill/SKILL.md). It calls a small, vendor-neutral CLI:
 
 ```bash
-jevcli is "Is this urgent?" < email.txt                                   # P(yes), exit 0/1
-jevcli which --in "I was charged twice" bug="a defect" billing="about money"   # the key
-jevcli ask --lines app.log --is error="Is this an error?" --parallel 8     # JSONL, one line per input
+jevcli ask --noul urgent="Is this urgent?" < email.txt                   # urgent  yes  0.95  (exit 0/1/3/4)
+jevcli question add team --choice "Which team?|web=frontend;api=backend"   # save a question once
+jevcli ask urgent,team < ticket.txt                                        # ask saved questions by name
+jevcli ask --lines app.log --noul err="Is this an error?"                  # batch: JSONL, one line per input
+jevcli defaults                                                            # every setting, and where it comes from
 jevcli judge --request "..." --proposal "..."                             # would the user accept this turn?
 ```
 Site: https://muthuishere.github.io/jevcli/
@@ -22,17 +24,16 @@ This installs the binary, puts the agent skill in `~/.claude/skills` and `~/.age
 present), and adds the Claude Code Stop-hook template, which stays disabled. `JEVCLI_NO_HOOK=1` installs the skills only.
 Releases are cut by pushing a `v*` tag (`.github/workflows/release.yml`). The site is `docs/`, published by `pages.yml`.
 
-## ask: many questions over many inputs
-```bash
-jevcli ask --in '{"role": "Super Smash Bros teammate", "message": "go for the ledge"}' \
-  --is is_appropriate="Does the message contain inappropriate language?" --is helps="Does this help donkey kong win?"
-jevcli ask --states tickets.jsonl --parallel 8 --which team="Which team?|web=frontend;api=backend" --score sev="How severe?|low;mid;high"
-```
-Inputs come from `--in` (one; `--raw` prints the full response), `--lines FILE` (one per text line) or `--states FILE.jsonl`
-(one JSON object or string per line). The output is one JSON line per input, in input order. `--questions set.json` reuses
-a saved `{NAME: {type, instructions, criteria}}` set. 20 tickets take 8.2 s sequentially and 1.5 s at `--parallel 8`.
-`--noul`, `--choice` and `query` still work as older names, as do the recipes (`verify`, `same`, `rank`, `find`,
-`extract`, `score`, `tree`, `pick-func`, `pick-skill`, `run`) and `ask Q --option k=desc [--route] [--samples]`.
+## ask
+Questions: saved names (`jevcli question add|list|show|remove`), inline `--noul NAME="Q"`, `--choice NAME="Q|k=d;k2=d"`,
+`--score NAME="Q|low;mid;high"`, or `--questions set.json`. Inputs: stdin, `--in`, `--lines FILE` or `--states FILE.jsonl`.
+One input prints `NAME VERDICT P` per question (`--json`, `--raw`) and exits 0 yes/decided, 1 no, 3 unsure, 4 error. A
+batch prints JSONL in input order (20 tickets: 8.2 s sequentially, 1.5 s at 8 parallel).
+
+## Settings
+`jevcli defaults [set|unset KEY VALUE] [--profile P]`: `yes` 0.8, `no` 0.2, `min_confidence` 0.6, `parallel` 8,
+`retries` 3, `timeout_s` 60, `chunk` 32, `ledger` true, `accept_min` 0.35, `more_max` 0.65. The order of precedence is
+built-in < config < profile < question < flag. Every call is logged without content (`jevcli stats`).
 
 The context lives in the question: the instructions and each option or criterion say whose decision it is and what is
 judged. `judge` asks four turn-level questions from a **question pack** (JSON). The built-in pack is neutral; a profile can

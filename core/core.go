@@ -81,6 +81,86 @@ type Profile struct {
 	Note        string            `json:"note,omitempty"`
 	Endpoint    string            `json:"endpoint,omitempty"` // legacy name for url
 	KeyEnv      string            `json:"key_env,omitempty"`  // legacy: same as headers {"Authorization": "Bearer $KEY_ENV"}
+	Defaults    Settings          `json:"defaults,omitempty"` // overrides the global defaults for this profile
+}
+
+// Settings are every tunable knob. Unset fields fall back: flag > profile defaults > config defaults > Builtin.
+type Settings struct {
+	Yes           *float64 `json:"yes,omitempty"`            // noul P at or above: verdict yes
+	No            *float64 `json:"no,omitempty"`             // noul P at or below: verdict no; in between: unsure
+	MinConfidence *float64 `json:"min_confidence,omitempty"` // choice / score confidence below: unsure
+	Parallel      *int     `json:"parallel,omitempty"`       // concurrent requests in a batch
+	Retries       *int     `json:"retries,omitempty"`        // tries on 429 / 5xx / network errors
+	TimeoutS      *int     `json:"timeout_s,omitempty"`      // per request
+	Chunk         *int     `json:"chunk,omitempty"`          // questions per request (servers cap it)
+	Ledger        *bool    `json:"ledger,omitempty"`         // log every call (no content) to calls.jsonl
+	AcceptMin     *float64 `json:"accept_min,omitempty"`     // Stop hook: block when P(accepts) is below
+	MoreMax       *float64 `json:"more_max,omitempty"`       // Stop hook: block when P(wanted_more) is above
+}
+
+func fp(v float64) *float64 { return &v }
+func ip(v int) *int         { return &v }
+func bp(v bool) *bool       { return &v }
+
+// Builtin are the defaults when nothing is configured.
+var Builtin = Settings{Yes: fp(0.8), No: fp(0.2), MinConfidence: fp(0.6), Parallel: ip(8), Retries: ip(3), TimeoutS: ip(60),
+	Chunk: ip(32), Ledger: bp(true), AcceptMin: fp(0.35), MoreMax: fp(0.65)}
+
+// Over returns s with every field set in o taking precedence.
+func (s Settings) Over(o Settings) Settings {
+	if o.Yes != nil {
+		s.Yes = o.Yes
+	}
+	if o.No != nil {
+		s.No = o.No
+	}
+	if o.MinConfidence != nil {
+		s.MinConfidence = o.MinConfidence
+	}
+	if o.Parallel != nil {
+		s.Parallel = o.Parallel
+	}
+	if o.Retries != nil {
+		s.Retries = o.Retries
+	}
+	if o.TimeoutS != nil {
+		s.TimeoutS = o.TimeoutS
+	}
+	if o.Chunk != nil {
+		s.Chunk = o.Chunk
+	}
+	if o.Ledger != nil {
+		s.Ledger = o.Ledger
+	}
+	if o.AcceptMin != nil {
+		s.AcceptMin = o.AcceptMin
+	}
+	if o.MoreMax != nil {
+		s.MoreMax = o.MoreMax
+	}
+	return s
+}
+
+// Settings resolves the effective settings for a profile: Builtin < config defaults < profile defaults.
+func (c Config) Settings(p Profile) Settings { return Builtin.Over(c.Defaults).Over(p.Defaults) }
+
+// Question is a named, reusable question: a System One question plus its own thresholds (optional).
+type Question struct {
+	Type          string   `json:"type"` // noul | choice | score
+	Instructions  string   `json:"instructions"`
+	Criteria      any      `json:"criteria,omitempty"` // noul {true,false} | choice {key: desc} | score [levels]
+	Yes           *float64 `json:"yes,omitempty"`
+	No            *float64 `json:"no,omitempty"`
+	MinConfidence *float64 `json:"min_confidence,omitempty"`
+}
+
+// Wire is the question as the API takes it.
+func (q Question) Wire() map[string]any {
+	m := map[string]any{"type": q.Type, "instructions": q.Instructions}
+	if q.Criteria != nil {
+		m["criteria"] = q.Criteria
+	}
+	return m
 }
 
 // Norm folds the legacy fields into url + headers.
@@ -103,17 +183,19 @@ func (p Profile) Norm() Profile {
 
 type HookCfg struct {
 	Enabled bool   `json:"enabled"`
-	Mode    string `json:"mode"`    // shadow (log only) | block (send the agent back)
-	Profile string `json:"profile"` // which endpoint judges the turn
+	Mode    string `json:"mode"`           // shadow (log only) | block (send the agent back)
+	Profile string `json:"profile"`        // which endpoint judges the turn
 	Gate    string `json:"gate,omitempty"` // "" = judge only turns that edited files with no check after; "all" = every turn
 }
 
 type Config struct {
-	Default     string             `json:"default_profile"`
-	Context     string             `json:"context,omitempty"` // standing context for every profile (before the profile's own)
-	ContextFile string             `json:"context_file,omitempty"`
-	Profiles    map[string]Profile `json:"profiles"`
-	Hooks       map[string]HookCfg `json:"hooks"`
+	Default     string              `json:"default_profile"`
+	Context     string              `json:"context,omitempty"` // standing context for every profile (before the profile's own)
+	ContextFile string              `json:"context_file,omitempty"`
+	Profiles    map[string]Profile  `json:"profiles"`
+	Hooks       map[string]HookCfg  `json:"hooks"`
+	Defaults    Settings            `json:"defaults,omitempty"`
+	Questions   map[string]Question `json:"questions,omitempty"` // named questions: jevcli ask NAME
 }
 
 func Home() string { h, _ := os.UserHomeDir(); return h }
@@ -268,6 +350,12 @@ func Ask(p Profile, state string, qs map[string]any, timeout time.Duration) (map
 	return ans, err
 }
 
+// Retries and LedgerOn are set from the effective Settings by the CLI before calls are made.
+var (
+	Retries  = 3
+	LedgerOn = true
+)
+
 // AskRaw is Ask without the shared LastRaw: it returns the response body too, so concurrent callers stay race-free.
 // It retries 429 / 5xx / network errors with backoff, rejects a reply that does not answer exactly the questions asked
 // or carries out-of-range probabilities (fail closed), and appends one line per call to the ledger.
@@ -280,7 +368,7 @@ func AskRaw(p Profile, state string, qs map[string]any, timeout time.Duration) (
 	t0 := time.Now()
 	var raw []byte
 	var err error
-	for try := 0; try < 3; try++ {
+	for try := 0; try < max(1, Retries); try++ {
 		if try > 0 {
 			time.Sleep(time.Duration(try*try) * 500 * time.Millisecond)
 		}
@@ -368,7 +456,7 @@ func validate(qs map[string]any, ans map[string]Answer) error {
 // ledger appends one JSON line per call to ~/.local/share/jevcli/calls.jsonl: host, model, question count and hash,
 // tokens, latency, error. Never the state, the question text or a header. JEVCLI_LEDGER=off disables it.
 func ledger(p Profile, qs map[string]any, model string, usage map[string]any, d time.Duration, err error) {
-	if os.Getenv("JEVCLI_LEDGER") == "off" {
+	if !LedgerOn || os.Getenv("JEVCLI_LEDGER") == "off" {
 		return
 	}
 	host := p.URL
@@ -650,8 +738,6 @@ type HookInput struct {
 	StopHookActive bool   `json:"stop_hook_active"`
 }
 
-const acceptMin, moreMax = 0.35, 0.65
-
 // Verdict scores one turn; the hook logs it and, in block mode, returns a reason that sends the agent back.
 func Verdict(cfg Config, h HookCfg, in HookInput) (logRec map[string]any, blockReason string) {
 	name, p, err := cfg.Profile(h.Profile)
@@ -671,6 +757,8 @@ func Verdict(cfg Config, h HookCfg, in HookInput) (logRec map[string]any, blockR
 			return rec, ""
 		}
 	}
+	set := cfg.Settings(p)
+	acceptMin, moreMax := *set.AcceptMin, *set.MoreMax
 	st := State(req, text, acts)
 	t0 := time.Now()
 	ans, err := Ask(p, cfg.WithContext(p, st), map[string]any{"accepts": NoulQ(p, "accepts"), "wanted_more": NoulQ(p, "wanted_more")}, 12*time.Second)

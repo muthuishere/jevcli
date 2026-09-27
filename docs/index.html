@@ -50,30 +50,36 @@ curl -fsSL https://muthuishere.github.io/jevcli/install.sh | sh</pre>
 </div>
 <div class="chat">
   <p class="who">Agent, using the jevcli skill</p>
-  <pre>jevcli ask --lines app.log --is fail="Is this line a failure an on-call engineer would act on?" --parallel 8 \
+  <pre>jevcli ask --lines app.log --noul fail="Is this line a failure an on-call engineer would act on?" --parallel 8 \
   | jq -c 'select(.answers.fail.noul > .8)'</pre>
   <p>jevcli flagged <b>2 of 4,812 lines</b> (P &gt; 0.8): the payment gateway timeout at 02:14 and <code>db connection refused</code> at 02:15. Both come from the pool size change in <code>db.go</code>; the fix and a test are below.</p>
 </div>
 <p class="c">The agent didn't read 4,812 lines. It asked one question in parallel, then worked on the two lines that mattered.</p>
 
-<h2>Three calls the skill teaches</h2>
+<h2>One command, your questions</h2>
 <div class="grid">
-  <div class="card"><b><code>is</code></b><p>A yes/no. It prints P(yes) and exits 0 or 1, so it drops into an <code>if</code>.</p></div>
-  <div class="card"><b><code>which</code></b><p>Pick one of your options. It prints the key, so it drops into a <code>case</code>.</p></div>
-  <div class="card"><b><code>ask</code></b><p>Many questions over many lines or JSON records, in parallel, one JSON line per input.</p></div>
+  <div class="card"><b>Ask anything</b><p>A yes/no (<code>--noul</code>), pick one (<code>--choice</code>) or a rating (<code>--score</code>). Put as many as you like in one call.</p></div>
+  <div class="card"><b>Save them once</b><p><code>jevcli question add urgent …</code>, then <code>jevcli ask urgent,team</code> from any agent, any repo.</p></div>
+  <div class="card"><b>Every knob is yours</b><p>Thresholds, parallelism, retries and timeouts come from config with sensible defaults, and can be set per profile or per question.</p></div>
 </div>
-<pre><span class="k">if</span> jevcli is "Is this urgent?" &lt; email.txt; <span class="k">then</span> ...; <span class="k">fi</span>                   <span class="o"># 0.98</span>
-jevcli which --in "I was charged twice" bug="a defect" billing="about money"   <span class="o"># billing</span>
-jevcli ask --lines app.log --is error="Is this an error?" --parallel 8      <span class="o"># JSONL, in input order</span></pre>
+<pre>jevcli question add urgent --noul "Is this urgent for the person receiving it?" --yes 0.85
+jevcli question add team --choice "Which team?|web=frontend;api=backend;billing=money"
+
+echo "Checkout is down, customers are being charged twice" | jevcli ask urgent,team
+<span class="o">urgent           yes        0.95
+team             billing    0.87</span>
+
+jevcli ask --lines app.log --noul err="Is this an error?"      <span class="o"># JSONL, one verdict per line, in parallel</span></pre>
+<p class="c">Exit codes are the contract: 0 yes, 1 no, 3 unsure, 4 error. An outage never reads as "no".</p>
 
 <h2>When the agent reaches for it</h2>
 <table>
 <tr><td>Triage a log, inbox or ticket queue</td><td><code>ask --lines</code> with one yes/no, then act on the lines above 0.8</td></tr>
-<tr><td>Sort items into buckets</td><td><code>ask --states t.jsonl --which team="…|web=…;api=…"</code></td></tr>
-<tr><td>Dedupe records</td><td><code>is "Are A and B the same customer?"</code></td></tr>
-<tr><td>Check a claim against a source</td><td><code>is "Does the text say payment is due in October?"</code></td></tr>
-<tr><td>Rank search results</td><td><code>ask --lines results.txt --is hit="Does this answer …?"</code>, then sort by score</td></tr>
-<tr><td>About to ask you "A or B?"</td><td><code>which</code> first; the agent asks only when confidence is below 0.6</td></tr>
+<tr><td>Sort items into buckets</td><td><code>ask --states t.jsonl team</code> (a saved choice)</td></tr>
+<tr><td>Dedupe records</td><td><code>ask --noul same="Are A and B the same customer?"</code></td></tr>
+<tr><td>Check a claim against a source</td><td><code>ask --noul ok="Does the text say payment is due in October?"</code></td></tr>
+<tr><td>Rank search results</td><td><code>ask --lines results.txt --noul hit="Does this answer …?"</code>, then sort by <code>p</code></td></tr>
+<tr><td>About to ask you "A or B?"</td><td>a <code>--choice</code> first; the agent asks only when the verdict is unsure</td></tr>
 <tr><td>About to hand back a turn</td><td><code>judge</code>: would you accept this, or did it stop short?</td></tr>
 </table>
 
