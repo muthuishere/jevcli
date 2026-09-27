@@ -194,7 +194,8 @@ type HookCfg struct {
 type Config struct {
 	Default    string              `json:"default_profile"`
 	Profiles   map[string]Profile  `json:"profiles"`
-	Hooks      map[string]HookCfg  `json:"hooks"`
+	Hooks      map[string]HookCfg  `json:"hooks,omitempty"` // legacy (v0.8): migrated into plugins["stop-judge"]
+	Plugins    map[string]Plugin   `json:"plugins"`
 	Defaults   Settings            `json:"defaults,omitempty"`
 	Questions  map[string]Question `json:"questions,omitempty"`             // named questions: jevcli ask NAME
 	LocalFile  string              `json:"local_context_file,omitempty"`    // file holding the folder section (default AGENTS.md, then CLAUDE.md)
@@ -217,7 +218,7 @@ func DefaultConfig() Config {
 		Profiles: map[string]Profile{
 			"default": {URL: "", Model: "", Note: "set with: jevcli profile add NAME URL --model M --header 'Authorization: Bearer $VAR'"},
 		},
-		Hooks: map[string]HookCfg{"stop": {Enabled: false, Mode: "shadow", Profile: "default"}},
+		Plugins: shipped(),
 	}
 }
 
@@ -238,10 +239,28 @@ func LoadConfig() Config {
 	for k, p := range c.Profiles {
 		c.Profiles[k] = p.Norm()
 	}
-	if c.Hooks == nil {
-		c.Hooks = DefaultConfig().Hooks
+	if c.Plugins == nil {
+		c.Plugins = shipped()
+		if h, ok := c.Hooks["stop"]; ok { // v0.8 config: carry the Stop hook's state over
+			pl := c.Plugins["stop-judge"]
+			pl.Enabled, pl.Profile, pl.Gate = h.Enabled, h.Profile, h.Gate
+			if h.Mode == "block" {
+				pl.Mode = "act"
+			}
+			c.Plugins["stop-judge"] = pl
+		}
+		c.Hooks = nil
 	}
 	return c
+}
+
+// shipped is a fresh copy of the shipped plugins.
+func shipped() map[string]Plugin {
+	m := map[string]Plugin{}
+	for k, p := range Shipped {
+		m[k] = p
+	}
+	return m
 }
 
 func SaveConfig(c Config) error {
@@ -937,66 +956,6 @@ type HookInput struct {
 	StopHookActive bool   `json:"stop_hook_active"`
 }
 
-// Verdict scores one turn; the hook logs it and, in block mode, returns a reason that sends the agent back.
-func Verdict(cfg Config, h HookCfg, in HookInput) (logRec map[string]any, blockReason string) {
-	name, p, err := cfg.Profile(h.Profile)
-	rec := map[string]any{"ts": time.Now().Format("2006-01-02T15:04:05"), "session": in.SessionID, "cwd": in.Cwd,
-		"transcript": in.TranscriptPath, "profile": name, "mode": h.Mode}
-	if err != nil {
-		rec["error"] = err.Error()
-		return rec, ""
-	}
-	req, text, acts, ok := LastTurn(in.TranscriptPath)
-	if !ok {
-		return nil, ""
-	}
-	if in.Cwd != "" { // the session's folder, so its "## Jev" section is the one sent
-		_ = os.Chdir(in.Cwd)
-	}
-	if h.Gate != "all" {
-		if why := skipTurn(acts); why != "" { // decided locally, no call spent
-			rec["skipped"] = why
-			return rec, ""
-		}
-	}
-	set := cfg.Settings(p)
-	acceptMin, moreMax := *set.AcceptMin, *set.MoreMax
-	st := State(req, text, acts)
-	t0 := time.Now()
-	ans, err := Ask(p, cfg.WithContext(p, st), map[string]any{"accepts": NoulQ(p, "accepts"), "wanted_more": NoulQ(p, "wanted_more")}, 12*time.Second)
-	rec["ms"] = time.Since(t0).Milliseconds()
-	if err != nil {
-		rec["error"] = err.Error()
-		return rec, ""
-	}
-	acc, more := ans["accepts"].P(), ans["wanted_more"].P()
-	var why []string
-	if acc < acceptMin {
-		why = append(why, "not accepted")
-	}
-	if more > moreMax {
-		why = append(why, "stopped short")
-	}
-	rec["accept"], rec["wanted_more"], rec["would_block"], rec["why"] = acc, more, len(why) > 0, why
-	rec["state"] = st
-	if len(p.Headers) > 0 {
-		rec["third_party"] = true // answered by a hosted Jev: never use as training data (its terms)
-	}
-	block := len(why) > 0 && h.Mode == "block" && !in.StopHookActive
-	rec["blocked"] = block
-	if !block {
-		return rec, ""
-	}
-	var tips []string
-	if acc < acceptMin {
-		tips = append(tips, fmt.Sprintf("the user would likely NOT accept this as it is (P(accept) %.2f): verify the result and show the evidence (command output, diff, test run)", acc))
-	}
-	if more > moreMax {
-		tips = append(tips, fmt.Sprintf("the user would likely want MORE (P %.2f): finish the missing part yourself instead of handing steps back, unless it truly needs the user's decision", more))
-	}
-	return rec, "jevcli (" + name + ", the user's decision model): " + strings.Join(tips, "; ") + ". If this is already right, say so briefly with the evidence and stop."
-}
-
 func AppendLog(rec map[string]any) {
 	_ = os.MkdirAll(DataDir(), 0o700)
 	f, err := os.OpenFile(filepath.Join(DataDir(), "verdicts.jsonl"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
@@ -1056,6 +1015,7 @@ func readJSON(p string) (map[string]any, error) {
 }
 
 func writeJSON(p string, m map[string]any) error {
+	_ = os.MkdirAll(filepath.Dir(p), 0o755)
 	if _, err := os.Stat(p); err == nil {
 		b, _ := os.ReadFile(p)
 		_ = os.WriteFile(fmt.Sprintf("%s.bak-jevcli-%s-%d", p, time.Now().Format("20060102-150405"), os.Getpid()), b, 0o600)
@@ -1081,67 +1041,6 @@ func isOurs(entry any) bool {
 	for _, h := range hs {
 		hm, _ := h.(map[string]any)
 		if c, _ := hm["command"].(string); isOurHook(c) {
-			return true
-		}
-	}
-	return false
-}
-
-// InstallHookTemplate adds jevcli's Stop hook entry (idempotent). Installed is not enabled: the entry runs
-// `jevcli hook run stop`, which does nothing unless hooks.stop.enabled is true in the jevcli config.
-func InstallHookTemplate(settings string) (bool, error) {
-	m, err := readJSON(settings)
-	if err != nil {
-		return false, err
-	}
-	hooks, _ := m["hooks"].(map[string]any)
-	if hooks == nil {
-		hooks = map[string]any{}
-		m["hooks"] = hooks
-	}
-	stop, _ := hooks["Stop"].([]any)
-	for _, e := range stop {
-		if isOurs(e) {
-			return false, nil
-		}
-	}
-	self, _ := os.Executable()
-	stop = append(stop, map[string]any{"hooks": []any{map[string]any{"type": "command", "command": `"` + self + `" hook run stop`, "timeout": 15}}})
-	hooks["Stop"] = stop
-	return true, writeJSON(settings, m)
-}
-
-func RemoveHookTemplate(settings string) (int, error) {
-	m, err := readJSON(settings)
-	if err != nil {
-		return 0, err
-	}
-	hooks, _ := m["hooks"].(map[string]any)
-	stop, _ := hooks["Stop"].([]any)
-	var keep []any
-	for _, e := range stop {
-		if !isOurs(e) {
-			keep = append(keep, e)
-		}
-	}
-	n := len(stop) - len(keep)
-	if n == 0 {
-		return 0, nil
-	}
-	if len(keep) == 0 {
-		delete(hooks, "Stop")
-	} else {
-		hooks["Stop"] = keep
-	}
-	return n, writeJSON(settings, m)
-}
-
-func HookInstalled(settings string) bool {
-	m, _ := readJSON(settings)
-	hooks, _ := m["hooks"].(map[string]any)
-	stop, _ := hooks["Stop"].([]any)
-	for _, e := range stop {
-		if isOurs(e) {
 			return true
 		}
 	}

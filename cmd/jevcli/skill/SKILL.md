@@ -99,7 +99,7 @@ current directory unless you pass `--cwd DIR`.
 | `parallel` | 8 | concurrent requests in a batch |
 | `retries` / `timeout_s` / `chunk` | 3 / 60 / 32 | tries on 429/5xx, seconds per request, questions per request |
 | `ledger` | true | log each call without content to `~/.local/share/jevcli/calls.jsonl` (`jevcli stats`) |
-| `accept_min` / `more_max` | 0.35 / 0.65 | Stop hook thresholds |
+| `accept_min` / `more_max` | 0.35 / 0.65 | legacy Stop hook thresholds (the `stop-judge` plugin has its own condition) |
 
 Flags override for one call: `--yes`, `--no`, `--min`, `--parallel`, `--profile`.
 
@@ -126,6 +126,37 @@ jevcli judge --request "<the user's request, verbatim>" --proposal "<your final 
 ```
 If `accept` is below 0.35, the user would likely push back: verify and show evidence. If `wanted more` is above 0.65,
 you stopped short: finish the missing part unless it truly needs the user.
+
+## Plugins: judgements at agent events (Claude Code today)
+
+A plugin is a hook behaviour in config: at an agent event, ask questions about what is happening and act on the answer.
+The shipped ones are **off**: `stop-judge` (Stop), `bash-guard` (PreToolUse:Bash), `injection-screen` (PostToolUse:
+WebFetch), `route` (UserPromptSubmit: simple request → suggest a haiku sub-agent). Turn one on and it runs in **shadow**
+mode, logging what it would do; `mode NAME act` lets it act.
+
+```bash
+jevcli plugin list                                  # what exists, enabled, mode
+jevcli plugin enable bash-guard                     # shadow: logs only
+jevcli plugin mode bash-guard act                   # deny / ask for real
+jevcli plugin test bash-guard "git push --force"    # dry run on a sample command: answers + decision, nothing logged
+jevcli plugin log bash-guard 20                     # what it decided, with the answers
+```
+
+**Add one from a description** when the user wants a check at an event. Write or reuse the questions first, then:
+```bash
+jevcli question add secret --noul "Does this file content contain a credential, token or private key?"
+jevcli plugin add secret-guard --desc "Refuse writing a secret into a file" \
+  --on PreToolUse:Write\|Edit --ask secret --deny "secret >= 0.8" --local
+```
+Fields: `--on EVENT[:Tool regex]`, `--ask q1,q2` (saved or built-in: accepts, wanted_more, destroys, remote, irreversible,
+injection, complexity, kind), then one of `--deny` / `--warn` / `--block` / `--context "COND"` where COND is
+`name >= 0.8 && other < 0.5 || kind == ops`. `--say TEXT` is what the agent is told (`{{name}}` = that answer).
+`--exec CMD` hands the event to any command instead (it gets `{event, payload, state, answers}` on stdin and prints the
+agent's decision JSON), so a tool another project built can be plugged in without a jevcli change. `--local` saves it
+in this repo's `.jevcli/plugins.json`. After adding: `jevcli install --hooks`, then `plugin enable`.
+
+Plugins follow Claude Code's hook protocol and `install --hooks` writes Claude Code's settings. In other agents the
+skill works but plugins do not run yet.
 
 ## Setup (once)
 

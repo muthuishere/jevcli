@@ -46,6 +46,17 @@ same (0.93 same), extract --kind date (due date, confidence 1.00), pick-func (re
 two failure lines), verify, rank, tree, score, route (act/confirm/escalate, exit 0/10/20), samples (agreement), run.
 A small personal model answered several of these wrongly: the recipes are only as good as the model behind the profile.
 
+## Plugins (v0.9.0, 2026-09-27)
+`core/plugin.go` + `cmd/jevcli/plugin.go`: a plugin = {on, ask, deny|warn|block|context, say, exec, profile, enabled,
+mode}. Generic runner `hook run EVENT` (shadow detached, act inline), `core.Output` maps decisions to Claude Code's hook
+JSON, `Eval` is a tiny condition language, folder plugins in `.jevcli/plugins.json`, built-in questions destroys /
+remote / irreversible / injection / complexity / kind in `core/questions.json`. v0.8 `hooks.stop` migrates to
+`stop-judge`. Live: bash-guard denied `rm -rf /` (destroys 0.91), allowed `ls -la`; route flagged a rename for a haiku
+sub-agent (complexity 0.19) and passed a multi-currency redesign (2.0).
+Gap: Claude Code protocol only. Next: adapters for Cursor / Gemini CLI hooks; check Codex; `eval` on plugin logs.
+Ecosystem (Reddit/HN, 2026-09-27): praise = speed/cost, PreToolUse guard; complaints = hype, "just a classifier",
+made-up numbers, privacy of what is sent, no explanation with a yes/no, no threshold calibration.
+
 ## v0.8.0 (2026-09-27)
 - Section heading: any level, with or without a space (`#jev`), may be empty; ends at the next same-or-higher heading.
 - AGENTS.md and CLAUDE.md are both read (global and folder) and merged with repeated lines dropped.

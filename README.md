@@ -47,6 +47,13 @@ jevcli only reads context; you edit it. It sends, in order:
 `--context`. A JSON input keeps its shape: the context is merged into its `"context"` field. The heading name and files
 are configurable (`local_context_section`, `local_context_file`, `global_context_file`).
 
+## Plugins (hooks as config)
+`plugins` in the config (or a repo's `.jevcli/plugins.json`): `{"on": "PreToolUse:Bash", "ask": "destroys,remote",
+"deny": "destroys >= 0.8", "warn": "remote >= 0.5"}`. One generic runner (`jevcli hook run EVENT`) serves every event;
+`install --hooks` writes one settings entry per event. Shipped, all disabled: `stop-judge`, `bash-guard`,
+`injection-screen`, `route`. `jevcli plugin list | show | add | remove | enable [--act] | disable | mode | test | log`.
+`exec` hands an event to any command. Claude Code's hook protocol only, for now.
+
 ## Settings
 `jevcli defaults [set|unset KEY VALUE] [--profile P]`: `yes` 0.8, `no` 0.2, `min_confidence` 0.6, `parallel` 8,
 `retries` 3, `timeout_s` 60, `chunk` 32, `ledger` true, `accept_min` 0.35, `more_max` 0.65. The order of precedence is

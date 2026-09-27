@@ -170,16 +170,18 @@ func cmdInstall(args []string) {
 		}
 	}
 	if !noHook {
-		added, err := core.InstallHookTemplate(core.SettingsPath())
+		added, removed, err := cfg.InstallHooks(core.SettingsPath())
 		if err != nil {
 			die("%v", err)
 		}
-		state := "already present"
-		if added {
-			state = "added (backup beside it)"
+		on := 0
+		for _, p := range cfg.AllPlugins() {
+			if p.Enabled {
+				on++
+			}
 		}
-		h := cfg.Hooks["stop"]
-		pr("hook     Stop template %s in %s; enabled=%v (turn on: jevcli hook enable stop)", state, core.SettingsPath(), h.Enabled)
+		pr("hooks    %s: %d added, %d removed in %s; %d of %d plugins enabled (jevcli plugin list)",
+			strings.Join(cfg.HookEvents(), ", "), added, removed, core.SettingsPath(), on, len(cfg.AllPlugins()))
 	}
 }
 
@@ -208,7 +210,7 @@ hook:
 	if !hooks {
 		return
 	}
-	n, err := core.RemoveHookTemplate(core.SettingsPath())
+	n, err := core.RemoveHooks(core.SettingsPath())
 	if err != nil {
 		die("%v", err)
 	}
@@ -217,56 +219,22 @@ hook:
 
 // ------------------------------------------------------------------ hooks
 
+// cmdHook: `hook run EVENT` is what settings.json calls; the rest are conveniences over `plugin`.
 func cmdHook(args []string) {
 	if len(args) == 0 {
-		die("usage: jevcli hook enable|disable stop | mode shadow|block | profile NAME | status | review [N] | run stop")
-	}
-	cfg := core.LoadConfig()
-	h := cfg.Hooks["stop"]
-	save := func() {
-		cfg.Hooks["stop"] = h
-		if err := core.SaveConfig(cfg); err != nil {
-			die("%v", err)
-		}
+		die("usage: jevcli hook run EVENT | status | review [N] | enable|disable stop  (plugins: jevcli plugin)")
 	}
 	switch args[0] {
-	case "enable":
-		h.Enabled = true
-		save()
-		_, p, _ := cfg.Profile(h.Profile)
-		warn := ""
-		if len(p.Headers) > 0 {
-			warn = "  WARNING: profile " + h.Profile + " uses an API key: every agent turn is sent to that endpoint (and may be billed)."
-		}
-		pr("stop hook enabled (mode %s, profile %s)%s", h.Mode, h.Profile, warn)
-		if !core.HookInstalled(core.SettingsPath()) {
-			pr("note: the hook template is not in %s yet: run `jevcli install`", core.SettingsPath())
-		}
-	case "disable":
-		h.Enabled = false
-		save()
-		pr("stop hook disabled (template stays installed, inert)")
-	case "mode":
-		if len(args) < 2 || (args[1] != "shadow" && args[1] != "block") {
-			die("usage: jevcli hook mode shadow|block")
-		}
-		h.Mode = args[1]
-		save()
-		pr("mode %s", h.Mode)
-	case "profile":
+	case "run":
 		if len(args) < 2 {
-			die("usage: jevcli hook profile NAME")
+			die("usage: jevcli hook run EVENT")
 		}
-		if _, _, err := cfg.Profile(args[1]); err != nil {
-			die("%v", err)
-		}
-		h.Profile = args[1]
-		save()
-		pr("hook profile %s", h.Profile)
+		hookRun(args[1], args[2:])
 	case "status":
-		pr("template  %v in %s", core.HookInstalled(core.SettingsPath()), core.SettingsPath())
-		pr("enabled   %v\nmode      %s\nprofile   %s", h.Enabled, h.Mode, h.Profile)
-		scored, would, errs := 0, 0, 0
+		cfg := core.LoadConfig()
+		pr("installed  %s in %s", strings.Join(core.InstalledEvents(core.SettingsPath()), ", "), core.SettingsPath())
+		cmdPlugin([]string{"list"})
+		scored, acted, errs := 0, 0, 0
 		if b, err := os.ReadFile(filepath.Join(core.DataDir(), "verdicts.jsonl")); err == nil {
 			day := time.Now().Add(-24 * time.Hour).Format("2006-01-02T15:04:05")
 			for _, l := range strings.Split(string(b), "\n") {
@@ -274,66 +242,88 @@ func cmdHook(args []string) {
 				if json.Unmarshal([]byte(l), &r) != nil || fmt.Sprint(r["ts"]) < day {
 					continue
 				}
-				if _, ok := r["accept"]; ok {
+				if _, ok := r["answers"]; ok {
 					scored++
 				}
-				if r["would_block"] == true {
-					would++
+				if d, _ := r["decision"].(string); d != "" && d != "allow" {
+					acted++
 				}
 				if _, ok := r["error"]; ok {
 					errs++
 				}
 			}
 		}
-		pr("24 h      %d scored, %d would block, %d errors", scored, would, errs)
+		_ = cfg
+		pr("24 h       %d scored, %d would act, %d errors", scored, acted, errs)
 	case "review":
 		cmdReview(args[1:])
-	case "run":
-		hookRun(cfg, h, args[1:])
+	case "enable", "disable", "mode", "profile": // v0.8 spelling: `hook enable stop`
+		name := "stop-judge"
+		rest := args[1:]
+		if len(rest) > 0 && rest[0] == "stop" {
+			rest = rest[1:]
+		}
+		if args[0] == "mode" && len(rest) > 0 && rest[0] == "block" {
+			rest[0] = "act"
+		}
+		cmdPlugin(append([]string{args[0], name}, rest...))
 	default:
 		die("unknown hook command %q", args[0])
 	}
 }
 
-// hookRun is what the agent's Stop hook executes. Disabled: exit at once. Shadow: hand the input to a detached copy and
-// return (the agent waits ~ms). Block: score synchronously and print {"decision":"block",...} when warranted. Fails open.
-func hookRun(cfg core.Config, h core.HookCfg, args []string) {
-	if !h.Enabled {
-		_, _ = io.Copy(io.Discard, os.Stdin)
+// hookRun is the generic runner behind every settings.json entry: read the event payload, run the enabled plugins
+// for it, print the agent's decision. Shadow plugins run detached so the agent never waits; act plugins run inline.
+func hookRun(event string, args []string) {
+	cfg := core.LoadConfig()
+	raw, _ := io.ReadAll(os.Stdin)
+	var p core.Payload
+	if json.Unmarshal(raw, &p) != nil {
 		return
 	}
-	raw, _ := io.ReadAll(os.Stdin)
-	if len(args) > 1 && args[1] == "--scored" { // the detached shadow worker
-		var in core.HookInput
-		if json.Unmarshal(raw, &in) == nil {
-			if rec, _ := core.Verdict(cfg, h, in); rec != nil {
-				core.AppendLog(rec)
-			}
+	var act, shadow []string
+	all := cfg.AllPlugins()
+	for _, n := range keys(all) {
+		pl := all[n]
+		if !pl.Enabled || !pl.Matches(event, p) {
+			continue
+		}
+		if pl.Mode == "act" {
+			act = append(act, n)
+		} else {
+			shadow = append(shadow, n)
+		}
+	}
+	scored := len(args) > 0 && args[0] == "--scored" // the detached shadow worker
+	if scored {
+		for _, n := range shadow {
+			_, rec := cfg.Run(n, all[n], event, p)
+			core.AppendLog(rec)
 		}
 		return
 	}
-	if h.Mode != "block" {
+	if len(shadow) > 0 {
 		f, err := os.CreateTemp("", "jevcli-hook-*.json")
 		if err == nil {
 			_, _ = f.Write(raw)
 			f.Close()
-			_ = core.Detach([]string{"hook", "run", "stop", "--scored"}, f.Name())
+			_ = core.Detach([]string{"hook", "run", event, "--scored"}, f.Name())
 			go func() { time.Sleep(3 * time.Second); os.Remove(f.Name()) }()
 			time.Sleep(50 * time.Millisecond)
 		}
+	}
+	if len(act) == 0 {
 		return
 	}
-	var in core.HookInput
-	if json.Unmarshal(raw, &in) != nil {
-		return
-	}
-	rec, reason := core.Verdict(cfg, h, in)
-	if rec != nil {
+	var ds []core.Decision
+	for _, n := range act {
+		d, rec := cfg.Run(n, all[n], event, p)
 		core.AppendLog(rec)
+		ds = append(ds, d)
 	}
-	if reason != "" {
-		b, _ := json.Marshal(map[string]string{"decision": "block", "reason": reason})
-		pr("%s", b)
+	stopActive, _ := p["stop_hook_active"].(bool)
+	if out := core.Output(event, ds, stopActive); out != "" {
+		pr("%s", out)
 	}
 }
 
@@ -475,7 +465,7 @@ func cmdConfig(args []string) {
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: jevcli ask|is|pick|filter|rank|question|context|defaults|judge|profile|stats|install|uninstall|hook|skill|version")
+		fmt.Fprintln(os.Stderr, "usage: jevcli ask|is|pick|filter|rank|question|context|defaults|judge|plugin|hook|profile|stats|install|uninstall|skill|version")
 		os.Exit(2)
 	}
 	a := takeCwd(os.Args[2:])
@@ -498,6 +488,8 @@ func main() {
 		cmdUninstall(a)
 	case "hook":
 		cmdHook(a)
+	case "plugin", "plugins":
+		cmdPlugin(a)
 	case "config":
 		cmdConfig(a)
 	case "stats":
