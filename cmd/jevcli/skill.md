@@ -30,6 +30,17 @@ jevcli ask "<yes/no question>" --context "<facts>" --true "<what yes means>" --f
 **Trust rule**: act on a choice only if `confidence >= 0.6`; on a yes/no only if `P(yes) >= 0.8` or `<= 0.2`. Otherwise
 ask the user and include the lean in one line ("jevcli leans stop, 0.51"). When you act on it, say so in your report.
 
+## Fuzzy if / switch / batch (use these instead of reasoning it out yourself)
+Each is one fast call (~0.4 s), so branch on meaning in shell and fan out in parallel:
+```bash
+if jevcli feels urgent < email.txt; then ...; fi          # exit 0 yes, 1 no; --threshold 0.7; any question works too
+case $(jevcli match bug="a defect" billing="about money" other="anything else" < msg.txt) in bug) ...;; esac
+jevcli query --states items.jsonl --parallel 8 --questions set.json   # one JSONL answer line per state, input order
+```
+A states file has one JSON object or JSON string per line. A question set is `{"NAME": {"type": "noul"|"choice"|"score",
+"instructions": "...", "criteria": ...}}`. Use a batch to triage many files, tickets, or log lines at once, then act only
+on the lines that pass (for example `jq 'select(.answers.urgent.noul > .7)'`). A "while" is a shell loop around `feels`.
+
 ## Cookbook recipes (all use the same profiles)
 
 | command | use it for |

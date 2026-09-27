@@ -21,6 +21,16 @@ jevcli query --state '{"role": "You are playing Super Smash Bros and receive mes
 ```
 `--choice NAME="INSTRUCTIONS|key=desc;key2=desc"` and `--score NAME="INSTRUCTIONS|level0;level1"` mix in other types.
 
+### An if statement, a switch, and a batch
+```bash
+if jevcli feels urgent < email.txt; then claude -p "Draft a reply" < email.txt; fi   # exit 0 = yes, 1 = no
+case $(jevcli match billing="about money" bug="a defect report" other="anything else" < msg.txt) in
+  billing) ... ;; bug) ... ;; esac
+jevcli query --states tickets.jsonl --parallel 8 --noul urgent="Is this urgent?" | jq -c 'select(.answers.urgent.noul > .7)'
+```
+`--states` takes one JSON object or JSON string per line and prints one JSONL answer line per state, in input order
+(20 tickets: 8.2 s sequential, 1.5 s at `--parallel 8`). `--questions set.json` reuses a saved `{NAME: question}` set.
+
 The context lives in the question: the instructions and each option or criterion say whose decision it is and what is
 judged. `judge` asks four turn-level questions from a **question pack** (JSON). The built-in pack is neutral; a profile can
 point to its own pack (`"questions": "/path/pack.json"`), which matters for a model trained on specific wording.

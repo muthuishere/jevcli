@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sync"
 
 	"path/filepath"
 	"sort"
@@ -591,7 +592,7 @@ func main() {
 		cmdQuery(a)
 	case "profile", "profiles":
 		cmdProfile(a)
-	case "verify", "same", "rank", "find", "extract", "tree", "pick-skill", "pick-func", "run", "score":
+	case "feels", "match", "verify", "same", "rank", "find", "extract", "tree", "pick-skill", "pick-func", "run", "score":
 		recipe(os.Args[1], a)
 	default:
 		die("unknown command %q", os.Args[1])
@@ -684,22 +685,15 @@ func keys[V any](m map[string]V) []string {
 func cmdQuery(args []string) {
 	fs := flag.NewFlagSet("query", flag.ExitOnError)
 	st, prof, raw := fs.String("state", "", "the state: text, a JSON object, @file or -"), fs.String("profile", "", "endpoint profile"), fs.Bool("raw", false, "print the full response")
+	states, qfile := fs.String("states", "", "batch: a JSONL file (or -) with one state per line; prints one JSONL answer line per state"), fs.String("questions", "", "a question-set file: JSON object of NAME -> {type, instructions, criteria}")
+	par := fs.Int("parallel", 4, "batch: concurrent requests")
 	var nouls, choices, scores multi
 	fs.Var(&nouls, "noul", `NAME=INSTRUCTIONS (repeat); optional criteria: NAME="INSTR|true text|false text"`)
 	fs.Var(&choices, "choice", `NAME="INSTRUCTIONS|key=desc;key2=desc2" (repeat)`)
 	fs.Var(&scores, "score", `NAME="INSTRUCTIONS|level0;level1;level2" (repeat, lowest first)`)
 	_ = fs.Parse(args)
-	if *st == "" || len(nouls)+len(choices)+len(scores) == 0 {
-		die("usage: jevcli query --state TEXT|JSON|@file --noul NAME=INSTRUCTIONS [...]")
-	}
-	state := strings.TrimSpace(text(*st))
-	if strings.HasPrefix(state, "{") { // a structured state travels as its compact JSON text, as the API expects
-		var v any
-		if json.Unmarshal([]byte(state), &v) != nil {
-			die("--state looks like JSON but does not parse")
-		}
-		b, _ := json.Marshal(v)
-		state = string(b)
+	if (*st == "") == (*states == "") || len(nouls)+len(choices)+len(scores) == 0 && *qfile == "" {
+		die("usage: jevcli query --state TEXT|JSON|@file | --states FILE.jsonl  --noul NAME=INSTRUCTIONS [...] [--questions set.json]")
 	}
 	split := func(spec string) (string, []string) {
 		name, rest, ok := strings.Cut(spec, "=")
@@ -709,6 +703,11 @@ func cmdQuery(args []string) {
 		return strings.TrimSpace(name), strings.Split(rest, "|")
 	}
 	qs := map[string]any{}
+	if *qfile != "" {
+		if err := json.Unmarshal([]byte(text("@"+*qfile)), &qs); err != nil {
+			die("--questions %s: want a JSON object of NAME -> question: %v", *qfile, err)
+		}
+	}
 	for _, n := range nouls {
 		name, parts := split(n)
 		q := map[string]any{"type": "noul", "instructions": strings.TrimSpace(parts[0])}
@@ -744,6 +743,18 @@ func cmdQuery(args []string) {
 		qs[name] = map[string]any{"type": "score", "instructions": strings.TrimSpace(parts[0]), "criteria": lv}
 	}
 	name, p := resolve(*prof)
+	if *states != "" {
+		in := *states
+		if in != "-" {
+			in = "@" + strings.TrimPrefix(in, "@")
+		}
+		queryBatch(name, p, text(in), qs, *par)
+		return
+	}
+	state, err := normState(text(*st))
+	if err != nil {
+		die("--state: %v", err)
+	}
 	ans := askMany(name, p, state, qs)
 	if *raw && len(qs) <= 32 {
 		var v any
@@ -760,4 +771,72 @@ func cmdQuery(args []string) {
 	}
 	b, _ := json.MarshalIndent(map[string]any{"profile": name, "model": model, "answers": ans}, "", "  ")
 	pr("%s", b)
+}
+
+// normState trims a state; a structured state travels as its compact JSON text, as the API expects.
+func normState(s string) (string, error) {
+	s = strings.TrimSpace(s)
+	if !strings.HasPrefix(s, "{") {
+		return s, nil
+	}
+	var v any
+	if json.Unmarshal([]byte(s), &v) != nil {
+		return "", errors.New("looks like JSON but does not parse")
+	}
+	b, _ := json.Marshal(v)
+	return string(b), nil
+}
+
+// queryBatch asks the same questions of every state in a JSONL input (a JSON object, or a JSON string for a text state,
+// per line; blank lines skipped), par requests at a time, and prints one JSONL line per state in input order. A failed
+// line prints its error and the batch goes on; the exit code is 1 if any line failed.
+func queryBatch(name string, p core.Profile, in string, qs map[string]any, par int) {
+	type row struct {
+		Line    int                    `json:"line"`
+		Model   any                    `json:"model,omitempty"`
+		Answers map[string]core.Answer `json:"answers,omitempty"`
+		Error   string                 `json:"error,omitempty"`
+	}
+	var lines []string
+	var nums []int
+	for i, l := range strings.Split(in, "\n") {
+		if l = strings.TrimSpace(l); l != "" {
+			lines, nums = append(lines, l), append(nums, i+1)
+		}
+	}
+	rows := make([]row, len(lines))
+	sem := make(chan struct{}, max(1, par))
+	var wg sync.WaitGroup
+	for i, l := range lines {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func() {
+			defer func() { <-sem; wg.Done() }()
+			rows[i] = row{Line: nums[i]}
+			var s string
+			if strings.HasPrefix(l, `"`) && json.Unmarshal([]byte(l), &s) == nil {
+				l = s
+			}
+			state, err := normState(l)
+			if err == nil {
+				rows[i].Answers, rows[i].Model, err = askManyErr(p, core.LoadConfig().WithContext(p, state), qs)
+			}
+			if errors.Is(err, core.ErrNeedKey) {
+				err = fmt.Errorf("profile %s needs %s in the environment", name, core.MissingEnv(p))
+			}
+			if err != nil {
+				rows[i].Error = err.Error()
+			}
+		}()
+	}
+	wg.Wait()
+	failed := false
+	for _, r := range rows {
+		b, _ := json.Marshal(r)
+		pr("%s", b)
+		failed = failed || r.Error != ""
+	}
+	if failed {
+		os.Exit(1)
+	}
 }

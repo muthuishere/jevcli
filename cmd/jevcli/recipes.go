@@ -27,6 +27,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/muthuishere/jevcli/core"
 )
@@ -76,6 +77,32 @@ func askMany(name string, p core.Profile, state string, qs map[string]any) map[s
 		}
 	}
 	return out
+}
+
+// askManyErr is askMany for concurrent callers: the context is already applied, errors come back instead of exiting, and
+// the model name comes from the response body rather than the shared LastRaw.
+func askManyErr(p core.Profile, state string, qs map[string]any) (map[string]core.Answer, any, error) {
+	const chunk = 32
+	ks := keys(qs)
+	out, model := map[string]core.Answer{}, any(nil)
+	for i := 0; i < len(ks); i += chunk {
+		part := map[string]any{}
+		for _, k := range ks[i:min(i+chunk, len(ks))] {
+			part[k] = qs[k]
+		}
+		ans, raw, err := core.AskRaw(p, state, part, 60*time.Second)
+		if err != nil {
+			return nil, nil, err
+		}
+		var v map[string]any
+		if json.Unmarshal(raw, &v) == nil {
+			model = v["model"]
+		}
+		for k, a := range ans {
+			out[k] = a
+		}
+	}
+	return out, model, nil
 }
 
 func noul(instr, t, f string) map[string]any {
@@ -293,6 +320,55 @@ func recipe(cmd string, args []string) {
 		for _, x := range top[:min(5, len(top))] {
 			pr("  %.2f  %s", x.v, x.k)
 		}
+
+	case "feels":
+		// A shell if statement: `if jevcli feels urgent < email.txt; then ...`. Exit 0 = yes, 1 = no, 2 = error.
+		fs := flag.NewFlagSet(cmd, flag.ExitOnError)
+		in, prof, th := fs.String("input", "-", "the text: TEXT, @file or - (stdin)"), profileFlag(fs), fs.Float64("threshold", 0.5, "P(yes) needed to exit 0")
+		quiet := fs.Bool("q", false, "print nothing, only the exit code")
+		adj, rest := firstPositional(args)
+		_ = fs.Parse(rest)
+		if adj == "" {
+			die("usage: jevcli feels ADJECTIVE|\"QUESTION\" [--input TEXT|@file|-] [--threshold 0.5]   (exit 0 yes, 1 no)")
+		}
+		instr := adj
+		if !strings.ContainsAny(adj, " ?") {
+			instr = "Does this feel " + adj + "?"
+		}
+		name, p := resolve(*prof)
+		a := ask(name, p, text(*in), map[string]any{"q": map[string]any{"type": "noul", "instructions": instr}})["q"]
+		if !*quiet {
+			fmt.Fprintf(os.Stderr, "%s: P %.2f (%s)\n", instr, a.P(), name)
+		}
+		if a.P() < *th {
+			os.Exit(1)
+		}
+
+	case "match":
+		// A switch: `case $(jevcli match billing="about money" bug="a defect report" < msg) in billing) ...`.
+		fs := flag.NewFlagSet(cmd, flag.ExitOnError)
+		in, prof, instr := fs.String("input", "-", "the text: TEXT, @file or - (stdin)"), profileFlag(fs), fs.String("question", "Which description fits best?", "the question")
+		var arms []string
+		for len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+			arms, args = append(arms, args[0]), args[1:]
+		}
+		_ = fs.Parse(args)
+		arms = append(arms, fs.Args()...)
+		if len(arms) < 2 {
+			die("usage: jevcli match KEY=\"description\" KEY2=\"description\" [...] [--input TEXT|@file|-]   (prints the key)")
+		}
+		crit := map[string]string{}
+		for _, a := range arms {
+			k, v, ok := strings.Cut(a, "=")
+			if !ok || k == "" {
+				die("want KEY=description, got %q", a)
+			}
+			crit[k] = v
+		}
+		name, p := resolve(*prof)
+		a := ask(name, p, text(*in), map[string]any{"q": map[string]any{"type": "choice", "instructions": *instr, "criteria": crit}})["q"]
+		fmt.Fprintf(os.Stderr, "match: %s (confidence %.2f, %s)\n", a.Choice, conf(a), name)
+		pr("%s", a.Choice)
 
 	case "pick-func":
 		fs := flag.NewFlagSet(cmd, flag.ExitOnError)

@@ -46,9 +46,13 @@ same (0.93 same), extract --kind date (due date, confidence 1.00), pick-func (re
 two failure lines), verify, rank, tree, score, route (act/confirm/escalate, exit 0/10/20), samples (agreement), run.
 A small personal model answered several of these wrongly: the recipes are only as good as the model behind the profile.
 
+## Fuzzy control flow + batch (done 2026-09-27, verified on hosted Jev)
+- `jevcli feels ADJ|QUESTION < text`: an if statement, exit 0/1 (outage 0.98 -> 0, newsletter 0.06 -> 1).
+- `jevcli match KEY="desc" ... < text`: a switch, prints the key ("charged twice" -> billing, 1.00).
+- `jevcli query --states FILE.jsonl --parallel N [--questions set.json]`: 20 states in 8.2 s sequential vs 1.5 s at
+  --parallel 8; JSONL out in input order, a bad line reports its error and the exit code is 1. `core.AskRaw` is race-free.
+
 ## Next
-- Parallel query ergonomics: `--state` from a JSONL file with one state per line (same questions for many states,
-  concurrent requests with a limit), and a question-set file (`--questions set.json`) so a batch reuses one set.
 - `query --json-in`: accept a full System One request body and stream answers as JSONL.
 - Tests: table tests for `State` trimming, `Redact`, `$VAR` expansion / `MissingEnv`, the transcript parser, settings.json
   install/uninstall (backup + only our entry), and a fake System One server for every command.
@@ -59,7 +63,7 @@ A small personal model answered several of these wrongly: the recipes are only a
 
 ## Known gaps
 - `judge` trims turns by a character budget (~1600 chars), not exact tokens; the server truncates a long premise too.
-- `find` and `rank` send one request per line / candidate (sequential): slow on big files until the parallel batch above.
+- `find` and `rank` still send one request per line / candidate sequentially; port them onto `askManyErr` + a worker pool.
 - `run` with more than 32 questions returns merged answers but `--raw` only shows the last chunk's body.
 - `extract --kind` regexes are simple (no relative dates like "next Friday").
 - The secret scanner of this machine flags the word used by a DB setting (`disable`) as a live value: a false positive.

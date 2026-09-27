@@ -258,8 +258,17 @@ func (p Profile) Expanded() Profile {
 
 // Ask posts one System One request to the profile's url with its headers (env vars expanded here, never stored).
 func Ask(p Profile, state string, qs map[string]any, timeout time.Duration) (map[string]Answer, error) {
+	ans, raw, err := AskRaw(p, state, qs, timeout)
+	if err == nil {
+		LastRaw = raw
+	}
+	return ans, err
+}
+
+// AskRaw is Ask without the shared LastRaw: it returns the response body too, so concurrent callers stay race-free.
+func AskRaw(p Profile, state string, qs map[string]any, timeout time.Duration) (map[string]Answer, []byte, error) {
 	if MissingEnv(p.Norm()) != "" {
-		return nil, ErrNeedKey
+		return nil, nil, ErrNeedKey
 	}
 	p = p.Expanded()
 	body, _ := json.Marshal(map[string]any{"model": p.Model, "state": state, "questions": qs})
@@ -270,21 +279,20 @@ func Ask(p Profile, state string, qs map[string]any, timeout time.Duration) (map
 	}
 	resp, err := (&http.Client{Timeout: timeout}).Do(req)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer resp.Body.Close()
 	raw, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode/100 != 2 {
-		return nil, fmt.Errorf("%s: HTTP %d: %s", p.URL, resp.StatusCode, strings.TrimSpace(string(raw))[:min(300, len(strings.TrimSpace(string(raw))))])
+		return nil, nil, fmt.Errorf("%s: HTTP %d: %s", p.URL, resp.StatusCode, strings.TrimSpace(string(raw))[:min(300, len(strings.TrimSpace(string(raw))))])
 	}
-	LastRaw = raw
 	var out struct {
 		Answers map[string]Answer `json:"answers"`
 	}
 	if err := json.Unmarshal(raw, &out); err != nil {
-		return nil, fmt.Errorf("unreadable answer: %v", err)
+		return nil, nil, fmt.Errorf("unreadable answer: %v", err)
 	}
-	return out.Answers, nil
+	return out.Answers, raw, nil
 }
 
 // LastRaw is the full body of the last successful response (model, answers, usage, id), for commands that print it as is.
