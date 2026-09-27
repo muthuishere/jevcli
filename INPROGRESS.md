@@ -52,6 +52,12 @@ A small personal model answered several of these wrongly: the recipes are only a
 - `jevcli query --states FILE.jsonl --parallel N [--questions set.json]`: 20 states in 8.2 s sequential vs 1.5 s at
   --parallel 8; JSONL out in input order, a bad line reports its error and the exit code is 1. `core.AskRaw` is race-free.
 
+## Distribution (2026-09-27)
+Repo public. Site https://muthuishere.github.io/jevcli/ (`docs/`, `pages.yml`). Tag `v*` -> `release.yml` builds 6 binaries.
+`install.sh` / `install.cmd` -> binary + `jevcli install` (skills in ~/.claude, ~/.agents, ~/.codex if present; Stop hook
+template, disabled). Verified end to end: macOS arm64 (curl|sh), Linux (alpine docker), Windows arm64 (agentbus, a home
+path with a space; reinstall idempotent, uninstall clean).
+
 ## Next
 - `query --json-in`: accept a full System One request body and stream answers as JSONL.
 - Tests: table tests for `State` trimming, `Redact`, `$VAR` expansion / `MissingEnv`, the transcript parser, settings.json

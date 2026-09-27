@@ -596,7 +596,10 @@ func Detach(args []string, stdinFile string) error {
 
 // ---------------------------------------------------------------- agent settings (Claude Code hooks)
 
-const HookMarker = "jevcli hook run"
+const HookMarker = " hook run "
+
+// isOurHook matches our hook command on every OS: `/x/jevcli hook run stop`, `"C:\x\jevcli.exe" hook run stop`.
+func isOurHook(c string) bool { return strings.Contains(c, "jevcli") && strings.Contains(c, HookMarker) }
 
 // SettingsPath is the REAL Claude Code user settings file (~/.claude/settings.json may be a symlink).
 func SettingsPath() string {
@@ -648,7 +651,7 @@ func isOurs(entry any) bool {
 	hs, _ := e["hooks"].([]any)
 	for _, h := range hs {
 		hm, _ := h.(map[string]any)
-		if c, _ := hm["command"].(string); strings.Contains(c, HookMarker) {
+		if c, _ := hm["command"].(string); isOurHook(c) {
 			return true
 		}
 	}
@@ -674,7 +677,7 @@ func InstallHookTemplate(settings string) (bool, error) {
 		}
 	}
 	self, _ := os.Executable()
-	stop = append(stop, map[string]any{"hooks": []any{map[string]any{"type": "command", "command": self + " hook run stop", "timeout": 15}}})
+	stop = append(stop, map[string]any{"hooks": []any{map[string]any{"type": "command", "command": `"` + self + `" hook run stop`, "timeout": 15}}})
 	hooks["Stop"] = stop
 	return true, writeJSON(settings, m)
 }
