@@ -25,6 +25,6 @@ fi
 chmod +x "$tmp/jevcli"
 mkdir -p "$BIN"; mv "$tmp/jevcli" "$BIN/jevcli"
 echo "jevcli: installed $("$BIN/jevcli" version) to $BIN/jevcli"
-if [ -n "${JEVCLI_NO_HOOK:-}" ]; then "$BIN/jevcli" install --no-hook; else "$BIN/jevcli" install; fi
+if [ -n "${JEVCLI_NO_HOOK:-}" ]; then "$BIN/jevcli" install --skills; else "$BIN/jevcli" install; fi
 case ":$PATH:" in *":$BIN:"*) ;; *) echo "jevcli: add $BIN to your PATH" ;; esac
 echo "jevcli: next: jevcli profile add jev URL --model M --header \"Authorization: Bearer \$YOUR_KEY_VAR\""

@@ -22,7 +22,7 @@ if errorlevel 1 (
   move /Y "%TEMP%\%ASSET%" "%JEVCLI_BIN%\jevcli.exe" >nul
 )
 "%JEVCLI_BIN%\jevcli.exe" version
-if "%JEVCLI_NO_HOOK%"=="" ("%JEVCLI_BIN%\jevcli.exe" install) else ("%JEVCLI_BIN%\jevcli.exe" install --no-hook)
+if "%JEVCLI_NO_HOOK%"=="" ("%JEVCLI_BIN%\jevcli.exe" install) else ("%JEVCLI_BIN%\jevcli.exe" install --skills)
 echo %PATH% | find /I "%JEVCLI_BIN%" >nul || (
   powershell -NoProfile -Command "$p=[Environment]::GetEnvironmentVariable('Path','User'); [Environment]::SetEnvironmentVariable('Path', ($p.TrimEnd(';')+';%JEVCLI_BIN%').TrimStart(';'), 'User')"
   echo jevcli: added %JEVCLI_BIN% to your user PATH; open a new terminal

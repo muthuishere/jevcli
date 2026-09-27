@@ -25,7 +25,8 @@ curl -fsSL https://muthuishere.github.io/jevcli/install.sh | sh                 
 curl -fsSLo install.cmd https://muthuishere.github.io/jevcli/install.cmd && install.cmd          # Windows
 ```
 This installs the binary, puts the agent skill in `~/.claude/skills` and `~/.agents/skills` (and `~/.codex/skills` if
-present), and adds the Claude Code Stop-hook template, which stays disabled. `JEVCLI_NO_HOOK=1` installs the skills only.
+present), and adds the Claude Code Stop-hook template, which stays disabled. `JEVCLI_NO_HOOK=1` installs the skills only. Later: `jevcli install [--skills] [--hooks]` and `jevcli uninstall
+[--skills] [--hooks]` (neither flag = both).
 Releases are cut by pushing a `v*` tag (`.github/workflows/release.yml`). The site is `docs/`, published by `pages.yml`.
 
 ## ask
@@ -36,9 +37,10 @@ batch prints JSONL in input order (20 tickets: 8.2 s sequentially, 1.5 s at 8 pa
 
 ## Context
 jevcli only reads context; you edit it. It sends, in order:
-1. The `## Jev` section of your global agent file (`~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, `~/.agents/AGENTS.md` or
-   `~/AGENTS.md`).
-2. The `## Jev` section of the nearest `AGENTS.md` / `CLAUDE.md` from the working directory up (`--cwd DIR` to choose).
+1. The `## Jev` section of your global agent files (`~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, `~/.agents/AGENTS.md`,
+   `~/AGENTS.md`), merged with repeats dropped (synced copies count once).
+2. The `## Jev` section of the nearest folder's `AGENTS.md` and/or `CLAUDE.md` from the working directory up (both merged,
+   repeats dropped; `--cwd DIR` to choose). `#jev`, `## Jev` and `### Jev notes` all count; an empty section is fine.
 3. `--context TEXT|@file` on the call (repeatable).
 
 `--no-context` skips 1 and 2. `jevcli context` shows what is sent and from which file. A saved question can carry its own

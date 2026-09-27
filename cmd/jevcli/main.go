@@ -142,10 +142,8 @@ func contains(l []string, s string) bool {
 }
 
 func cmdInstall(args []string) {
-	fs := flag.NewFlagSet("install", flag.ExitOnError)
-	noSkill := fs.Bool("no-skill", false, "do not write the agent skill")
-	noHook := fs.Bool("no-hook", false, "do not add the Stop-hook template")
-	_ = fs.Parse(args)
+	skills, hooks := parts("install", args)
+	noSkill, noHook := !skills, !hooks
 	cfg := core.LoadConfig()
 	if _, err := os.Stat(core.ConfigPath()); err != nil {
 		if err := core.SaveConfig(cfg); err != nil {
@@ -153,7 +151,7 @@ func cmdInstall(args []string) {
 		}
 		pr("config   %s (hooks disabled)", core.ConfigPath())
 	}
-	if !*noSkill {
+	if !noSkill {
 		for _, d := range skillDirs() {
 			dst := filepath.Join(d, "jevcli")
 			_ = os.RemoveAll(dst) // a reinstall leaves no stale files from an older skill
@@ -171,7 +169,7 @@ func cmdInstall(args []string) {
 			pr("skill    %s", dst)
 		}
 	}
-	if !*noHook {
+	if !noHook {
 		added, err := core.InstallHookTemplate(core.SettingsPath())
 		if err != nil {
 			die("%v", err)
@@ -185,12 +183,30 @@ func cmdInstall(args []string) {
 	}
 }
 
-func cmdUninstall() {
+// parts reads --skills / --hooks: both when neither is given. --no-skill / --no-hook still work.
+func parts(cmd string, args []string) (skills, hooks bool) {
+	fs := flag.NewFlagSet(cmd, flag.ExitOnError)
+	s, h := fs.Bool("skills", false, "only the agent skill"), fs.Bool("hooks", false, "only the hook template")
+	ns, nh := fs.Bool("no-skill", false, "skip the agent skill"), fs.Bool("no-hook", false, "skip the hook template")
+	_ = fs.Parse(args)
+	skills, hooks = *s || !*h, *h || !*s
+	return skills && !*ns, hooks && !*nh
+}
+
+func cmdUninstall(args []string) {
+	skills, hooks := parts("uninstall", args)
+	if !skills {
+		goto hook
+	}
 	for _, d := range skillDirs() {
 		if _, err := os.Stat(filepath.Join(d, "jevcli", "SKILL.md")); err == nil {
 			_ = os.RemoveAll(filepath.Join(d, "jevcli"))
 			pr("skill removed  %s", filepath.Join(d, "jevcli"))
 		}
+	}
+hook:
+	if !hooks {
+		return
 	}
 	n, err := core.RemoveHookTemplate(core.SettingsPath())
 	if err != nil {
@@ -479,7 +495,7 @@ func main() {
 	case "install":
 		cmdInstall(a)
 	case "uninstall":
-		cmdUninstall()
+		cmdUninstall(a)
 	case "hook":
 		cmdHook(a)
 	case "config":

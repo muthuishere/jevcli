@@ -323,16 +323,34 @@ func (c Config) GlobalContextFiles() []string {
 		filepath.Join(h, ".agents/AGENTS.md"), filepath.Join(h, "AGENTS.md"))
 }
 
-// GlobalContext is the section from the first global agent file that has one: its text and the file.
-func (c Config) GlobalContext() (string, string) {
-	for _, f := range c.GlobalContextFiles() {
-		if b, err := os.ReadFile(f); err == nil {
-			if sec, ok := Section(string(b), c.LocalSection()); ok {
-				return sec, f
+// GlobalContext is the section merged from every global agent file that has one (synced copies are deduplicated).
+func (c Config) GlobalContext() (string, string) { return c.sections(c.GlobalContextFiles()) }
+
+// sections reads the section from each file that exists and has one, and merges them without repeats: identical
+// sections count once, and a line already sent is not sent again. It returns the text and the files it came from.
+func (c Config) sections(files []string) (string, string) {
+	var lines, from []string
+	seen := map[string]bool{}
+	for _, f := range files {
+		b, err := os.ReadFile(f)
+		if err != nil {
+			continue
+		}
+		sec, ok := Section(string(b), c.LocalSection())
+		if !ok {
+			continue
+		}
+		from = append(from, f)
+		for _, l := range strings.Split(sec, "\n") {
+			k := strings.Join(strings.Fields(l), " ")
+			if k != "" && seen[k] {
+				continue
 			}
+			seen[k] = true
+			lines = append(lines, l)
 		}
 	}
-	return "", ""
+	return strings.TrimSpace(strings.Join(lines, "\n")), strings.Join(from, ", ")
 }
 
 // LocalContextFiles are the files searched for a "## Jev" section: config local_context_file, else AGENTS.md then
@@ -350,8 +368,8 @@ func (c Config) LocalContextFiles() []string {
 	return out
 }
 
-// LocalContext is the folder context: the "## Jev" section of the nearest AGENTS.md / CLAUDE.md from the working
-// directory up (the home folder is skipped: that is global instructions, not a project). It returns the text and the file.
+// LocalContext is the folder context: the section of the nearest folder (working directory up, home skipped) whose
+// AGENTS.md / CLAUDE.md has one; when both files have it, the two are merged without repeats.
 func (c Config) LocalContext() (string, string) {
 	d, err := os.Getwd()
 	if err != nil {
@@ -359,13 +377,12 @@ func (c Config) LocalContext() (string, string) {
 	}
 	for {
 		if d != Home() {
+			var fs []string
 			for _, n := range c.LocalContextFiles() {
-				f := filepath.Join(d, n)
-				if b, err := os.ReadFile(f); err == nil {
-					if sec, ok := Section(string(b), c.LocalSection()); ok {
-						return sec, f
-					}
-				}
+				fs = append(fs, filepath.Join(d, n))
+			}
+			if sec, from := c.sections(fs); from != "" {
+				return sec, from
 			}
 		}
 		up := filepath.Dir(d)
@@ -376,19 +393,30 @@ func (c Config) LocalContext() (string, string) {
 	}
 }
 
-// heading matches a markdown heading whose text is name (any level from # to ######, any case; trailing words are
-// allowed, so "## Jev context" matches "Jev").
-func heading(line, name string) (level int, ok bool) {
+// headingLevel is the level (1-6) of a markdown heading line, or 0. "#jev" (no space) counts too, but not "#!/bin/sh"
+// or a bare "#".
+func headingLevel(line string) (int, string) {
 	t := strings.TrimSpace(line)
-	level = len(t) - len(strings.TrimLeft(t, "#"))
-	if level == 0 || level > 6 || !strings.HasPrefix(t[level:], " ") {
+	n := len(t) - len(strings.TrimLeft(t, "#"))
+	rest := strings.TrimSpace(t[n:])
+	if n == 0 || n > 6 || rest == "" || strings.HasPrefix(rest, "!") {
+		return 0, ""
+	}
+	return n, rest
+}
+
+// heading matches a heading whose text starts with name (any level, any case, with or without a space after the #:
+// "# Jev", "##jev", "### Jev notes").
+func heading(line, name string) (level int, ok bool) {
+	lv, rest := headingLevel(line)
+	if lv == 0 {
 		return 0, false
 	}
-	h, n := strings.Fields(strings.ToLower(t[level:])), strings.Fields(strings.ToLower(name))
+	h, n := strings.Fields(strings.ToLower(rest)), strings.Fields(strings.ToLower(name))
 	if len(n) == 0 || len(h) < len(n) {
 		return 0, false
 	}
-	return level, strings.Join(h[:len(n)], " ") == strings.Join(n, " ")
+	return lv, strings.Join(h[:len(n)], " ") == strings.Join(n, " ")
 }
 
 // Section returns the body of the first section headed name: every line up to the next heading of the same or a higher
@@ -406,11 +434,8 @@ func Section(md, name string) (string, bool) {
 			if strings.HasPrefix(strings.TrimSpace(m), "```") {
 				fence = !fence
 			}
-			if !fence {
-				t := strings.TrimSpace(m)
-				if n := len(t) - len(strings.TrimLeft(t, "#")); n > 0 && n <= lv && strings.HasPrefix(t[n:], " ") {
-					break
-				}
+			if n, _ := headingLevel(m); !fence && n > 0 && n <= lv {
+				break
 			}
 			body = append(body, m)
 		}

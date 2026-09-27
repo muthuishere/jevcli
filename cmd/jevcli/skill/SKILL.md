@@ -58,8 +58,8 @@ The user keeps it by hand in a `## Jev` section of the agent files they already 
 
 | layer | where | who edits |
 |---|---|---|
-| global | `## Jev` in `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, `~/.agents/AGENTS.md` or `~/AGENTS.md` (the first file that has one) | the user |
-| folder | `## Jev` in the nearest `AGENTS.md` or `CLAUDE.md` from the working directory up (like the agents find them) | the user |
+| global | `## Jev` in `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, `~/.agents/AGENTS.md` and `~/AGENTS.md` (merged, repeats dropped) | the user |
+| folder | `## Jev` in the nearest folder's `AGENTS.md` and/or `CLAUDE.md`, from the working directory up (merged, repeats dropped) | the user |
 | call | `--context "TEXT"` or `--context @file` (repeatable) | you, per call |
 
 ```bash
@@ -69,7 +69,8 @@ jevcli is "Is this spam?" --no-context < msg.txt                          # skip
 jevcli context                                                           # show what is sent, and from which file
 ```
 The same message scored 0.84 with no context, 0.94 with "the meeting is in 20 minutes" and 0.64 (unsure) with "the
-meeting is in three months". Pass the facts that decide it. Any heading level works, and so does "## Jev notes". The
+meeting is in three months". Pass the facts that decide it. Any heading level works (`#jev`, `## Jev`, `### Jev notes`). The section ends at the next heading of the same or a
+higher level, and it may be empty. The
 heading name and the files can be changed in config (`local_context_section`, `local_context_file`,
 `global_context_file`). If the context looks wrong, tell the user which file to edit. Do not edit it yourself.
 

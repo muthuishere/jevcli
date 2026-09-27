@@ -46,6 +46,11 @@ same (0.93 same), extract --kind date (due date, confidence 1.00), pick-func (re
 two failure lines), verify, rank, tree, score, route (act/confirm/escalate, exit 0/10/20), samples (agreement), run.
 A small personal model answered several of these wrongly: the recipes are only as good as the model behind the profile.
 
+## v0.8.0 (2026-09-27)
+- Section heading: any level, with or without a space (`#jev`), may be empty; ends at the next same-or-higher heading.
+- AGENTS.md and CLAUDE.md are both read (global and folder) and merged with repeated lines dropped.
+- `jevcli install|uninstall [--skills] [--hooks]`, neither flag = both (`--no-skill` / `--no-hook` still work).
+
 ## Context is read-only (v0.7.0, 2026-09-27)
 Owner direction: the CLI never writes context. Sources: the `## Jev` section (any level, configurable name) of the global
 agent file (~/.claude/CLAUDE.md, ~/.codex/AGENTS.md, ~/.agents/AGENTS.md, ~/AGENTS.md; first with the section) and of the
