@@ -103,6 +103,14 @@ current directory unless you pass `--cwd DIR`.
 
 Flags override for one call: `--yes`, `--no`, `--min`, `--parallel`, `--profile`.
 
+## Scenarios with real answers
+
+`references/scenarios.md` (next to this file) has 18 real agent situations: the exact call, the exact answer hosted Jev
+gave, and what to do next (log triage, ticket routing, ranking, picking a value, claim checks, "push or ask?", dangerous
+commands, prompt injection, which file first, flaky vs real test, review comments, effort routing, secrets, build
+verdicts, tool choice, judging a turn), plus how to turn an `unsure` into a clear answer by asking a better question.
+Read it the first time you use jevx in a session, or whenever an answer comes back unsure.
+
 ## When to reach for it
 
 | you are about to... | do this instead |

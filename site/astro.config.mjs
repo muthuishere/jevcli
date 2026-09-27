@@ -57,6 +57,7 @@ export default defineConfig({
 				{
 					label: 'Guides',
 					items: [
+						{ label: 'Agent scenarios', slug: 'guides/scenarios' },
 						{ label: 'Ask', slug: 'guides/ask' },
 						{ label: 'Shortcuts: is, pick, filter, rank', slug: 'guides/shortcuts' },
 						{ label: 'Saved questions', slug: 'guides/questions' },

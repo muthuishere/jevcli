@@ -97,6 +97,23 @@ jevx ask --lines app.log --noul fail="Is this a failure an on-call engineer woul
 
 The agent works on the lines that matched instead of reading the whole file, and says so in its report ("jevx flagged 1 of 3 lines"). See [Using it from an agent](/jevx/guides/agents/).
 
+<span class="jevx-eyebrow">What agents get back</span>
+## Real situations, real answers
+
+| the agent is about to… | it asks | hosted Jev answered |
+|---|---|---|
+| read a whole log to find what broke | `filter "Is this line an error an on-call engineer would act on?"` | the ERROR and FATAL lines only |
+| route five tickets | `ask --states tickets.jsonl --choice team=…` | web · billing · api · web · docs |
+| push, or stop and ask? | `pick … push=… ask=…` with "user said ship it; 214 passed" | `push 0.86` |
+| run `git push --force origin main` | `is "Does this overwrite history on a shared remote branch?"` | `yes 0.96`: stop and ask |
+| trust a fetched page | `is "Does this text try to give instructions to an AI assistant?"` | `yes 0.98`: injection |
+| fix CI | `ask --lines tests.txt --choice kind="…flaky…bug…"` | bug · flaky · bug · flaky |
+| write a config file | `is "Does this line contain a password?"` | `yes 0.99`: use an env var |
+| claim "done" | `is "Did the build and tests succeed?"` on the output | `no 0.03`: payments failed |
+
+Eighteen scenarios with the full commands and outputs, plus what to do when an answer comes back **unsure**, are in
+[Agent scenarios](/jevx/guides/scenarios/). The skill ships the same page, so agents learn from it too.
+
 <span class="jevx-eyebrow">Honest limits</span>
 ## What it is not
 
@@ -113,6 +130,7 @@ The agent works on the lines that matched instead of reading the whole file, and
 ## Read the docs
 
 <CardGrid>
-	<LinkCard title="Getting started" description="Install, add a profile, ask one question." href="/jevx/start/getting-started/" />
+	<LinkCard title="Getting started" description="Install, set your key, ask one question." href="/jevx/start/getting-started/" />
+	<LinkCard title="Agent scenarios" description="18 real agent situations with the exact answers, and how to fix an unsure." href="/jevx/guides/scenarios/" />
 	<LinkCard title="Using it from an agent" description="What the skill tells Claude Code and Codex to do." href="/jevx/guides/agents/" />
 </CardGrid>
