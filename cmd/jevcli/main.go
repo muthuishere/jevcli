@@ -470,6 +470,8 @@ func main() {
 	}
 	a := takeCwd(os.Args[2:])
 	switch os.Args[1] {
+	case "help", "-h", "--help":
+		pr("usage: jevcli ask|is|pick|filter|rank|question|context|defaults|judge|plugin|hook|profile|stats|install|uninstall|skill|version\n  jevcli COMMAND -h for flags; jevcli skill for the full guide; https://muthuishere.github.io/jevcli/")
 	case "ask", "a":
 		cmdAsk(a)
 	case "is", "pick", "filter", "rank":

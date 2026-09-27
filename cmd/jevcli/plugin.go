@@ -76,8 +76,7 @@ func cmdPlugin(args []string) {
 	}
 	switch args[0] {
 	case "show":
-		b, _ := json.MarshalIndent(need(), "", "  ")
-		pr("%s", b)
+		pr("%s", jsonPretty(need()))
 	case "remove", "rm":
 		need()
 		delete(target, name)
@@ -197,8 +196,7 @@ func cmdPlugin(args []string) {
 			return
 		}
 		d, rec := cfg.Run(name, p, p.Event(), pay)
-		b, _ := json.MarshalIndent(map[string]any{"decision": d, "record": rec, "output": core.Output(p.Event(), []core.Decision{d}, false)}, "", "  ")
-		pr("%s", b)
+		pr("%s", jsonPretty(map[string]any{"decision": d, "record": rec, "output": core.Output(p.Event(), []core.Decision{d}, false)}))
 	case "log":
 		n := 20
 		filter := name
@@ -211,8 +209,9 @@ func cmdPlugin(args []string) {
 			fmt.Sscan(args[2], &n)
 		}
 		b, err := os.ReadFile(filepath.Join(core.DataDir(), "verdicts.jsonl"))
-		if err != nil {
-			die("no log yet")
+		if err != nil || strings.TrimSpace(string(b)) == "" {
+			pr("no decisions logged yet (a plugin logs once it is enabled and its event fires)")
+			return
 		}
 		lines := strings.Split(strings.TrimSpace(string(b)), "\n")
 		shown := 0
@@ -273,4 +272,14 @@ func samplePayload(event string, words []string) core.Payload {
 		p["stop_hook_active"] = false
 	}
 	return p
+}
+
+// jsonPretty is MarshalIndent without HTML escaping, so conditions such as "destroys >= 0.8 && remote < 0.5" read as written.
+func jsonPretty(v any) string {
+	var b strings.Builder
+	enc := json.NewEncoder(&b)
+	enc.SetEscapeHTML(false)
+	enc.SetIndent("", "  ")
+	_ = enc.Encode(v)
+	return strings.TrimRight(b.String(), "\n")
 }

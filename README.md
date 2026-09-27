@@ -37,7 +37,7 @@ batch prints JSONL in input order (20 tickets: 8.2 s sequentially, 1.5 s at 8 pa
 
 ## Context
 jevcli only reads context; you edit it. It sends, in order:
-1. The `## Jev` section of your global agent files (`~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, `~/.agents/AGENTS.md`,
+1. The `## Jev` section of your global agent files (`$CLAUDE_CONFIG_DIR/CLAUDE.md`, `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, `~/.agents/AGENTS.md`,
    `~/AGENTS.md`), merged with repeats dropped (synced copies count once).
 2. The `## Jev` section of the nearest folder's `AGENTS.md` and/or `CLAUDE.md` from the working directory up (both merged,
    repeats dropped; `--cwd DIR` to choose). `#jev`, `## Jev` and `### Jev notes` all count; an empty section is fine.

@@ -241,9 +241,9 @@ func cmdAsk(args []string) {
 	prof := fs.String("profile", "", "endpoint profile")
 	asJSON := fs.Bool("json", false, "one input: print JSON instead of lines")
 	raw := fs.Bool("raw", false, "one input: print the server's full response")
-	yes := fs.Float64("yes", -1, "override: noul P at or above is yes")
-	no := fs.Float64("no", -1, "override: noul P at or below is no")
-	minC := fs.Float64("min", -1, "override: choice / score confidence below is unsure")
+	yes := fs.Float64("yes", -1, "override: noul P at or above is yes (default from `jevcli defaults`)")
+	no := fs.Float64("no", -1, "override: noul P at or below is no (default from `jevcli defaults`)")
+	minC := fs.Float64("min", -1, "override: choice / score confidence below is unsure (default from `jevcli defaults`)")
 	par := fs.Int("parallel", 0, "override: concurrent requests in a batch")
 	var nouls, choices, scores, ctxs multi
 	fs.Var(&ctxs, "context", "background for this call: TEXT or @file (repeat); added after the ## Jev sections")

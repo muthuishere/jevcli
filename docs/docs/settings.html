@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Settings · jevcli</title>
+<meta name="description" content="Every knob has a default, is visible in one command, and follows one precedence: built-in &lt; config &lt; profile &lt; question &lt; flag.">
+<link rel="stylesheet" href="../site.css">
+<script>try{var t=localStorage.getItem('theme');if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
+</head>
+<body>
+<header class="top">
+<a class="brand" href="../index.html">jevcli</a>
+<nav class="toplinks">
+<a href="../docs/getting-started.html">Docs</a>
+<a href="../skill.md">Skill</a>
+<a href="https://github.com/muthuishere/jevcli">GitHub</a>
+<button class="theme" type="button" aria-label="Toggle dark mode" title="Toggle dark mode">&#9680;</button>
+</nav>
+</header>
+<div class="wrap docs"><nav class="side" aria-label="Documentation"><details class="sidebox"><summary>Documentation</summary><ol><li><a href="getting-started.html">Getting started</a></li><li><a href="ask.html">Ask</a></li><li><a href="questions.html">Saved questions</a></li><li><a href="context.html">Context</a></li><li class="here"><a href="settings.html">Settings</a></li><li><a href="plugins.html">Plugins</a></li><li><a href="skill.html">The skill (for agents)</a></li><li><a href="reliability-and-privacy.html">Reliability &amp; privacy</a></li><li><a href="install-and-release.html">Install &amp; release</a></li><li><a href="faq.html">FAQ</a></li></ol></details></nav><main><h1>Settings</h1><p class="summary">Every knob has a default, is visible in one command, and follows one precedence: built-in &lt; config &lt; profile &lt; question &lt; flag.</p><h2 id="see-everything">See everything<a class="anchor" href="#see-everything">#</a></h2><figure class="code"><button class="copy" type="button" aria-label="Copy">copy</button><pre><code>jevcli defaults</code></pre><pre class="out" aria-label="output"><code>yes              0.8      default
+no               0.2      default
+min_confidence   0.6      default
+parallel         8        default
+retries          3        default
+timeout_s        60       default
+chunk            32       default
+ledger           true     default
+accept_min       0.35     default
+more_max         0.65     default</code></pre></figure><p>The third column says where the value comes from: <code>default</code>, <code>config</code>, or <code>profile NAME</code> when you pass <code>--profile</code>. This is the whole list; there are no hidden knobs. A question's own thresholds and a call's flags apply on top and are not shown here.</p><table><thead><tr><th>key</th><th>default</th><th>meaning</th></tr></thead><tbody><tr><td><code>yes</code> / <code>no</code></td><td>0.8 / 0.2</td><td>a yes/no P at or above <code>yes</code> is yes, at or below <code>no</code> is no, in between is unsure</td></tr><tr><td><code>min_confidence</code></td><td>0.6</td><td>a choice or score with lower confidence is unsure</td></tr><tr><td><code>parallel</code></td><td>8</td><td>concurrent requests in a batch</td></tr><tr><td><code>retries</code></td><td>3</td><td>tries on HTTP 429, 5xx and network errors, with backoff</td></tr><tr><td><code>timeout_s</code></td><td>60</td><td>seconds per request</td></tr><tr><td><code>chunk</code></td><td>32</td><td>questions per request; more are split across requests</td></tr><tr><td><code>ledger</code></td><td>true</td><td>append one content-free line per call to <code>~/.local/share/jevcli/calls.jsonl</code></td></tr><tr><td><code>accept_min</code> / <code>more_max</code></td><td>0.35 / 0.65</td><td>the <code>judge</code> thresholds the skill quotes (the <code>stop-judge</code> plugin carries its own condition)</td></tr></tbody></table><h2 id="change-one">Change one<a class="anchor" href="#change-one">#</a></h2><figure class="code"><button class="copy" type="button" aria-label="Copy">copy</button><pre><code>jevcli defaults set yes 0.85
+jevcli defaults set parallel 4 --profile myjev     # only when that profile is used
+jevcli defaults unset yes</code></pre></figure><h2 id="precedence">Precedence<a class="anchor" href="#precedence">#</a></h2><p>built-in &lt; config &lt; profile &lt; the question's own thresholds (<code>question add --yes/--no/--min</code>) &lt; flags on the call (<code>--yes</code>, <code>--no</code>, <code>--min</code>, <code>--parallel</code>, <code>--profile</code>). The most specific wins.</p><h2 id="profiles">Profiles<a class="anchor" href="#profiles">#</a></h2><p>A profile is <code>url</code>, <code>model</code>, <code>headers</code>, and optionally <code>questions</code> (a question pack for <code>judge</code>). <code>$VAR</code> / <code>${VAR}</code> in any field is expanded from the environment when the request is made and never written back; a missing variable fails with its name, exit 4. Legacy <code>endpoint</code> / <code>key_env</code> fields are still read.</p><figure class="code"><button class="copy" type="button" aria-label="Copy">copy</button><pre><code>jevcli profile add hosted https://example.com/v1/systemone --model some-model --header "Authorization: Bearer $JEV_API_KEY"
+jevcli profile add local 'http://$JEV_HOST/v1/systemone' --model my-model
+jevcli profile use local
+jevcli profile list
+jevcli profile show local
+jevcli profile remove hosted</code></pre></figure><h2 id="files-and-environment">Files and environment<a class="anchor" href="#files-and-environment">#</a></h2><table><thead><tr><th>what</th><th>where</th></tr></thead><tbody><tr><td>config (profiles, questions, plugins, settings)</td><td><code>~/.config/jevcli/config.json</code>, or <code>JEVCLI_CONFIG</code></td></tr><tr><td>repo questions / plugins</td><td><code>.jevcli/questions.json</code>, <code>.jevcli/plugins.json</code> (nearest, from cwd up)</td></tr><tr><td>call ledger</td><td><code>~/.local/share/jevcli/calls.jsonl</code>; <code>JEVCLI_LEDGER=off</code> disables it</td></tr><tr><td>plugin verdict log</td><td><code>~/.local/share/jevcli/verdicts.jsonl</code></td></tr><tr><td>installer knobs</td><td><code>JEVCLI_VERSION</code>, <code>JEVCLI_BIN</code>, <code>JEVCLI_NO_HOOK</code></td></tr></tbody></table><nav class="pager"><a href="context.html">&larr; Context</a><a href="plugins.html">Plugins &rarr;</a></nav></main></div><footer class="foot">jevcli judges; it does not write. Source and issues: <a href="https://github.com/muthuishere/jevcli">github.com/muthuishere/jevcli</a>.</footer>
+<script src="../site.js"></script>
+</body>
+</html>

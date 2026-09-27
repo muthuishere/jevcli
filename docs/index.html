@@ -3,109 +3,29 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>jevcli: the judgement skill for coding agents</title>
-<meta name="description" content="An agent skill for Claude Code, Codex and any agent: fast yes/no, pick-one and 0-1 judgements from a Jev-style decision model, so your agent stops burning tokens on small decisions.">
-<style>
-:root { --bg:#fbfaf7; --fg:#1d1c1a; --mute:#6b6760; --line:#e4e0d8; --card:#ffffff; --code:#f3f0e9; --accent:#b4441f; --ok:#2f7d4f; }
-@media (prefers-color-scheme: dark) { :root { --bg:#131211; --fg:#ece9e3; --mute:#9b968d; --line:#2c2a27; --card:#1a1917; --code:#201e1c; --accent:#ec7a52; --ok:#6cc08f; } }
-* { box-sizing: border-box; }
-body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
-main { max-width: 820px; margin: 0 auto; padding: 64px 16px 88px; }
-.eyebrow { color: var(--accent); font-weight: 600; font-size: .85rem; letter-spacing: .08em; text-transform: uppercase; }
-h1 { font-size: clamp(2rem, 5vw, 3rem); line-height: 1.1; margin: 10px 0 14px; letter-spacing: -0.025em; }
-h2 { font-size: 1.3rem; margin: 64px 0 8px; letter-spacing: -0.01em; }
-.lead { font-size: 1.2rem; color: var(--mute); margin: 0 0 30px; max-width: 640px; }
-pre { background: var(--code); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font: 14px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; margin: 12px 0; }
-code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .9em; }
-.c { color: var(--mute); } .k { color: var(--accent); } .o { color: var(--ok); }
-.agents { display:flex; flex-wrap:wrap; gap:8px; margin: 18px 0 0; }
-.agents span { border:1px solid var(--line); border-radius:999px; padding:3px 12px; font-size:.88rem; color:var(--mute); }
-.chat { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; margin: 16px 0; }
-.chat p { margin: 0 0 10px; }
-.who { font-size: .78rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--mute); margin-bottom: 4px !important; }
-.grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; margin-top: 16px; }
-.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; }
-.card b { display:block; margin-bottom: 4px; }
-.card p { margin: 0; color: var(--mute); font-size: .95rem; }
-table { width:100%; border-collapse: collapse; font-size: .95rem; margin-top: 12px; }
-td { border-top: 1px solid var(--line); padding: 10px 8px 10px 0; vertical-align: top; }
-td:first-child { color: var(--mute); width: 42%; }
-a { color: var(--accent); }
-footer { margin-top: 72px; color: var(--mute); font-size: .9rem; border-top: 1px solid var(--line); padding-top: 18px; }
-</style>
+<title>jevcli</title>
+<meta name="description" content="An agent skill plus a small Go CLI that gives coding agents typed judgements (yes/no, pick-one, rating) from any Jev-style System One endpoint.">
+<link rel="stylesheet" href="site.css">
+<script>try{var t=localStorage.getItem('theme');if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
 </head>
 <body>
-<main>
-<div class="eyebrow">An agent skill</div>
-<h1>Give your coding agent a gut feeling.</h1>
-<p class="lead">The jevcli skill lets Claude Code, Codex or any agent hand small judgements to a decision model: <em>is this urgent, which bucket, same customer, is this line an error</em>. Each one comes back in about 0.4 s as a number or a key, so the agent saves its own reasoning for the real work.</p>
-<pre><span class="c"># one line installs the skill in every agent on this machine</span>
-curl -fsSL https://muthuishere.github.io/jevcli/install.sh | sh</pre>
-<div class="agents"><span>Claude Code</span><span>Codex</span><span>~/.agents (any agent)</span><span>macOS · Linux · Windows</span></div>
-
-<h2>What it looks like inside your agent <span class="c" style="font-weight:400;font-size:.9rem">(an example session)</span></h2>
-<div class="chat">
-  <p class="who">You</p>
-  <p>Go through last night's app.log and fix whatever broke.</p>
-</div>
-<div class="chat">
-  <p class="who">Agent, using the jevcli skill</p>
-  <pre>jevcli ask --lines app.log --noul fail="Is this line a failure an on-call engineer would act on?" --parallel 8 \
-  | jq -c 'select(.answers.fail.noul > .8)'</pre>
-  <p>jevcli flagged <b>2 of 4,812 lines</b> (P &gt; 0.8): the payment gateway timeout at 02:14 and <code>db connection refused</code> at 02:15. Both come from the pool size change in <code>db.go</code>; the fix and a test are below.</p>
-</div>
-<p class="c">The agent didn't read 4,812 lines. It asked one question in parallel, then worked on the two lines that mattered.</p>
-
-<h2>One command, your questions</h2>
-<div class="grid">
-  <div class="card"><b>Ask anything</b><p>A yes/no (<code>--noul</code>), pick one (<code>--choice</code>) or a rating (<code>--score</code>). Put as many as you like in one call.</p></div>
-  <div class="card"><b>Save them once</b><p><code>jevcli question add urgent …</code>, then <code>jevcli ask urgent,team</code> from any agent, any repo.</p></div>
-  <div class="card"><b>Every knob is yours</b><p>Thresholds, parallelism, retries and timeouts come from config with sensible defaults, and can be set per profile or per question.</p></div>
-</div>
-<pre><span class="k">if</span> jevcli is "Is this urgent?" &lt; email.txt; <span class="k">then</span> ...; <span class="k">fi</span>   <span class="o"># yes 0.95</span>
-jevcli filter "Is this an error?" &lt; app.log           <span class="o"># grep by meaning</span>
-jevcli rank "Is this about refunds?" --top 5 &lt; results.txt
-
-jevcli question add urgent --noul "Is this urgent for the person receiving it?" --yes 0.85
-jevcli question add team --choice "Which team?|web=frontend;api=backend;billing=money"
-
-echo "Checkout is down, customers are being charged twice" | jevcli ask urgent,team
-<span class="o">urgent           yes        0.95
-team             billing    0.87</span>
-
-jevcli ask --lines app.log --noul err="Is this an error?"      <span class="o"># JSONL, one verdict per line, in parallel</span></pre>
-<p class="c">Exit codes are the contract: 0 yes, 1 no, 3 unsure, 4 error. An outage never reads as "no".</p>
-
-<h2>When the agent reaches for it</h2>
-<table>
-<tr><td>Triage a log, inbox or ticket queue</td><td><code>ask --lines</code> with one yes/no, then act on the lines above 0.8</td></tr>
-<tr><td>Sort items into buckets</td><td><code>ask --states t.jsonl team</code> (a saved choice)</td></tr>
-<tr><td>Dedupe records</td><td><code>ask --noul same="Are A and B the same customer?"</code></td></tr>
-<tr><td>Check a claim against a source</td><td><code>ask --noul ok="Does the text say payment is due in October?"</code></td></tr>
-<tr><td>Rank search results</td><td><code>ask --lines results.txt --noul hit="Does this answer …?"</code>, then sort by <code>p</code></td></tr>
-<tr><td>About to ask you "A or B?"</td><td>a <code>--choice</code> first; the agent asks only when the verdict is unsure</td></tr>
-<tr><td>About to hand back a turn</td><td><code>judge</code>: would you accept this, or did it stop short?</td></tr>
-</table>
-
-<h2>Built so the agent can trust it</h2>
-<div class="grid">
-  <div class="card"><b>Numbers, not prose</b><p>Every answer is a probability, a key or a level. The skill tells the agent to act only above 0.8 (or below 0.2) and to check anything in between.</p></div>
-  <div class="card"><b>Fast enough to fan out</b><p>20 tickets take 8.2 s one at a time and 1.5 s with <code>--parallel 8</code>.</p></div>
-  <div class="card"><b>Any Jev-like endpoint</b><p>Hosted Jev, a self-hosted model or your own. Keys stay in environment variables and are never written to disk.</p></div>
-  <div class="card"><b>Hooks off by default</b><p>An optional Claude Code Stop hook scores each turn. It stays off until you run <code>jevcli hook enable stop</code>.</p></div>
-</div>
-
-<h2>Install</h2>
-<pre><span class="c"># macOS / Linux</span>
-curl -fsSL https://muthuishere.github.io/jevcli/install.sh | sh
-<span class="c"># Windows</span>
-curl -fsSLo install.cmd https://muthuishere.github.io/jevcli/install.cmd &amp;&amp; install.cmd
-
-<span class="c"># point it at your endpoint (the key stays in your environment)</span>
-jevcli profile add jev https://your-endpoint/v1/systemone --model MODEL --header "Authorization: Bearer $YOUR_KEY_VAR"</pre>
-<p>This installs the skill in <code>~/.claude/skills</code> and <code>~/.agents/skills</code> (plus <code>~/.codex/skills</code> if that folder exists), along with the small <code>jevcli</code> binary the skill calls. Read the skill itself: <a href="skill.md">skill.md</a>.</p>
-
-<footer>jevcli judges; it does not write. Your agent still writes the code and the reply, and now spends less effort on the small calls. <a href="https://github.com/muthuishere/jevcli">Source on GitHub</a></footer>
-</main>
+<header class="top">
+<a class="brand" href="index.html">jevcli</a>
+<nav class="toplinks">
+<a href="docs/getting-started.html">Docs</a>
+<a href="skill.md">Skill</a>
+<a href="https://github.com/muthuishere/jevcli">GitHub</a>
+<button class="theme" type="button" aria-label="Toggle dark mode" title="Toggle dark mode">&#9680;</button>
+</nav>
+</header>
+<div class="wrap home"><main><section class="hero"><p class="eyebrow">An agent skill for Claude Code, Codex and any agent</p><h1>Typed judgements for coding agents.</h1><p>jevcli lets an agent hand small decisions (is this urgent, which team, is this line an error) to a Jev-style decision model and get back a <strong>verdict with a probability</strong>, not prose. The agent keeps its own reasoning for the real work. Any System One endpoint works: hosted Jev, self-hosted, or a personal model.</p><figure class="code"><button class="copy" type="button" aria-label="Copy">copy</button><pre><code>curl -fsSL https://muthuishere.github.io/jevcli/install.sh | sh</code></pre></figure><p class="chips"><span>Claude Code</span><span>Codex</span><span>~/.agents (any agent)</span><span>macOS · Linux · Windows</span><span>Go, no dependencies</span></p></section><h2 id="what-it-looks-like">What it looks like<a class="anchor" href="#what-it-looks-like">#</a></h2><p>Real calls, real output, made while writing this page against the hosted Jev endpoint (model <code>jev-1.13.0</code>). Exit codes are the contract: 0 yes, 1 no, 3 unsure, 4 error.</p><figure class="code"><button class="copy" type="button" aria-label="Copy">copy</button><pre><code>echo "Prod is down" | jevcli is "Is this urgent?"; echo "exit $?"</code></pre><pre class="out" aria-label="output"><code>yes 0.93
+exit 0</code></pre></figure><figure class="code"><button class="copy" type="button" aria-label="Copy">copy</button><pre><code>echo "Weekly newsletter: our new office plants" | jevcli is "Is this urgent?"; echo "exit $?"</code></pre><pre class="out" aria-label="output"><code>no 0.05
+exit 1</code></pre></figure><figure class="code"><button class="copy" type="button" aria-label="Copy">copy</button><pre><code>jevcli pick "Which team?" web=frontend api=backend billing=money --in "charged twice"</code></pre><pre class="out" aria-label="output"><code>billing 0.99</code></pre></figure><figure class="code"><button class="copy" type="button" aria-label="Copy">copy</button><pre><code>cat app.log</code></pre><pre class="out" aria-label="output"><code>INFO  09:12:01 request served in 12ms
+ERROR 09:12:04 payment gateway timeout after 30s
+INFO  09:12:05 cache warmed</code></pre></figure><figure class="code"><button class="copy" type="button" aria-label="Copy">copy</button><pre><code>jevcli filter "Is this line an error or failure?" &lt; app.log</code></pre><pre class="out" aria-label="output"><code>ERROR 09:12:04 payment gateway timeout after 30s</code></pre></figure><p>The same question over the same file as a batch, one JSON line per input, answered in parallel:</p><figure class="code"><button class="copy" type="button" aria-label="Copy">copy</button><pre><code>jevcli ask --lines app.log --noul err="Is this line an error or failure?"</code></pre><pre class="out" aria-label="output"><code>{"line":1,"input":"INFO  09:12:01 request served in 12ms","answers":{"err":{"answer":{"type":"noul","noul":0.02},"p":0.02,"verdict":"no"}}}
+{"line":2,"input":"ERROR 09:12:04 payment gateway timeout after 30s","answers":{"err":{"answer":{"type":"noul","noul":0.98},"p":0.98,"verdict":"yes"}}}
+{"line":3,"input":"INFO  09:12:05 cache warmed","answers":{"err":{"answer":{"type":"noul","noul":0.02},"p":0.02,"verdict":"no"}}}</code></pre></figure><h2 id="four-ideas">Four ideas<a class="anchor" href="#four-ideas">#</a></h2><div class="grid"><a class="card" href="docs/ask.html"><b>One command</b><p><code>jevcli ask</code> takes any number of questions (yes/no, pick-one, rating) and one input or a batch. <code>is</code>, <code>pick</code>, <code>filter</code> and <code>rank</code> are the same command with the question already shaped.</p></a><a class="card" href="docs/questions.html"><b>Your questions, saved</b><p><code>jevcli question add urgent --noul "…"</code> once, then <code>jevcli ask urgent</code> from any repo. <code>--local</code> keeps a question in the repo's <code>.jevcli/questions.json</code>, committed with the code.</p></a><a class="card" href="docs/context.html"><b>Context from your agent files</b><p>It reads the <code>## Jev</code> section of the <code>AGENTS.md</code> / <code>CLAUDE.md</code> you already have, global and per folder, and never writes them. <code>jevcli context</code> shows exactly what is sent.</p></a><a class="card" href="docs/plugins.html"><b>Plugins as config</b><p>A Claude Code hook is a few JSON fields: an event, the questions to ask, and a condition to deny, warn, block or add context. Shipped disabled; shadow mode first.</p></a></div><h2 id="inside-an-agent">Inside an agent<a class="anchor" href="#inside-an-agent">#</a></h2><p>The skill (<code>SKILL.md</code>) is what the agent reads. It says when to reach for jevcli, how to word a question so it stands alone, what each exit code means, and what never to do with it. A typical use:</p><figure class="code"><button class="copy" type="button" aria-label="Copy">copy</button><pre><code>jevcli ask --lines app.log --noul fail="Is this a failure an on-call engineer would act on?" \
+  | jq -c 'select(.answers.fail.verdict=="yes")'</code></pre></figure><p>The agent then works on the lines that matched instead of reading the whole file, and says so in its report ("jevcli flagged 1 of 3 lines"). Read <a href="docs/skill.html">the skill page</a> or <a href="skill.md">the skill itself</a>.</p><h2 id="what-it-is-not">What it is not<a class="anchor" href="#what-it-is-not">#</a></h2><ul><li><strong>Not a safety gate.</strong> Permissions, money, legal and irreversible actions stay with you. A plugin can deny a shell command, but it is a probability threshold, not a policy engine.</li><li><strong>Not a generator.</strong> It never writes code, replies or files. A wrong answer is a wrong number, not a wrong patch.</li><li><strong>Not local by default.</strong> The question text and the input go to whichever endpoint your profile points at. Point it at your own server if that matters; the ledger stores no content either way. See <a href="docs/reliability-and-privacy.html">Reliability &amp; privacy</a>.</li><li><strong>Not free.</strong> A hosted endpoint bills per call. <code>jevcli stats</code> shows calls and tokens per day so you can see it.</li><li><strong>Not an explanation.</strong> You get <code>yes 0.93</code>, not why. Write the question so the number means something.</li><li><strong>Not calibrated for you yet.</strong> The 0.8 / 0.2 thresholds are defaults. Check a few verdicts against your own judgement before trusting them in a loop, and tune per question (<code>--yes</code>, <code>--no</code>, <code>--min</code>).</li></ul><h2 id="read-the-docs">Read the docs<a class="anchor" href="#read-the-docs">#</a></h2><ol class="toc"><li><a href="docs/getting-started.html">Getting started</a></li><li><a href="docs/ask.html">Ask</a></li><li><a href="docs/questions.html">Saved questions</a></li><li><a href="docs/context.html">Context</a></li><li><a href="docs/settings.html">Settings</a></li><li><a href="docs/plugins.html">Plugins</a></li><li><a href="docs/skill.html">The skill (for agents)</a></li><li><a href="docs/reliability-and-privacy.html">Reliability &amp; privacy</a></li><li><a href="docs/install-and-release.html">Install &amp; release</a></li><li><a href="docs/faq.html">FAQ</a></li></ol></main></div><footer class="foot">jevcli judges; it does not write. Source and issues: <a href="https://github.com/muthuishere/jevcli">github.com/muthuishere/jevcli</a>.</footer>
+<script src="site.js"></script>
 </body>
 </html>

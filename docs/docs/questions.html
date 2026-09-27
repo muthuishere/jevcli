@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Saved questions · jevcli</title>
+<meta name="description" content="Write a question once, tune its thresholds, and reuse it by name from any agent in any repo, or keep it with one repo.">
+<link rel="stylesheet" href="../site.css">
+<script>try{var t=localStorage.getItem('theme');if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
+</head>
+<body>
+<header class="top">
+<a class="brand" href="../index.html">jevcli</a>
+<nav class="toplinks">
+<a href="../docs/getting-started.html">Docs</a>
+<a href="../skill.md">Skill</a>
+<a href="https://github.com/muthuishere/jevcli">GitHub</a>
+<button class="theme" type="button" aria-label="Toggle dark mode" title="Toggle dark mode">&#9680;</button>
+</nav>
+</header>
+<div class="wrap docs"><nav class="side" aria-label="Documentation"><details class="sidebox"><summary>Documentation</summary><ol><li><a href="getting-started.html">Getting started</a></li><li><a href="ask.html">Ask</a></li><li class="here"><a href="questions.html">Saved questions</a></li><li><a href="context.html">Context</a></li><li><a href="settings.html">Settings</a></li><li><a href="plugins.html">Plugins</a></li><li><a href="skill.html">The skill (for agents)</a></li><li><a href="reliability-and-privacy.html">Reliability &amp; privacy</a></li><li><a href="install-and-release.html">Install &amp; release</a></li><li><a href="faq.html">FAQ</a></li></ol></details></nav><main><h1>Saved questions</h1><p class="summary">Write a question once, tune its thresholds, and reuse it by name from any agent in any repo, or keep it with one repo.</p><h2 id="save-one">Save one<a class="anchor" href="#save-one">#</a></h2><figure class="code"><button class="copy" type="button" aria-label="Copy">copy</button><pre><code>jevcli question add urgent --noul "Is this urgent for the person receiving it?" --yes 0.85
+jevcli question add team --choice "Which team should handle this?|web=frontend or UI;api=backend;billing=money"
+jevcli question add sev --score "How severe is this?|low;medium;high"
+jevcli question list
+jevcli question show team</code></pre></figure><p>Then anywhere: <code>jevcli ask urgent,team,sev &lt; ticket.txt</code>, <code>jevcli is urgent &lt; mail.txt</code>, or <code>jevcli ask --states tickets.jsonl team</code>.</p><figure class="code"><button class="copy" type="button" aria-label="Copy">copy</button><pre><code>jevcli question add</code></pre><pre class="out" aria-label="output"><code>jevcli: usage: jevcli question add NAME --noul "QUESTION" | --choice "QUESTION|k=desc;k2=desc" | --score "QUESTION|low;mid;high" [--yes 0.85 --no 0.15 --min 0.6]</code></pre></figure><table><thead><tr><th>flag</th><th>meaning</th></tr></thead><tbody><tr><td><code>--noul "Q"</code></td><td>a yes/no question</td></tr><tr><td><code>--choice "Q|key=desc;key2=desc"</code></td><td>pick one key</td></tr><tr><td><code>--score "Q|low;mid;high"</code></td><td>one level, lowest first</td></tr><tr><td><code>--yes 0.85</code> <code>--no 0.15</code></td><td>this question's own yes/no band (yes/no only)</td></tr><tr><td><code>--min 0.6</code></td><td>this question's own confidence floor (choice / score)</td></tr><tr><td><code>--context TEXT|@file</code></td><td>background sent with this question only; a file is read now, at save time</td></tr><tr><td><code>--local</code></td><td>save into this folder's <code>.jevcli/questions.json</code> instead of the global config</td></tr></tbody></table><h2 id="global-or-per-repo">Global or per repo<a class="anchor" href="#global-or-per-repo">#</a></h2><p>Global questions live in <code>~/.config/jevcli/config.json</code>. <code>--local</code> writes to the nearest <code>.jevcli/questions.json</code> from the working directory up (found like <code>.git</code>), which you can commit. A local question wins over a global one with the same name, and applies to every call made inside that folder, including an agent's. <code>question list</code>, <code>show</code> and <code>remove</code> take <code>--local</code> the same way.</p><p>On a fresh machine there is nothing yet:</p><figure class="code"><button class="copy" type="button" aria-label="Copy">copy</button><pre><code>jevcli question list</code></pre><pre class="out" aria-label="output"><code>no named questions yet: jevcli question add NAME --noul "QUESTION" [--local]</code></pre></figure><h2 id="for-agents">For agents<a class="anchor" href="#for-agents">#</a></h2><p>The skill tells the agent to run <code>jevcli question list</code> before writing a question inline, because you may already have one tuned. If a saved question's thresholds are set, they beat the config and profile values and lose only to flags on the call.</p><h2 id="a-question-set-file">A question-set file<a class="anchor" href="#a-question-set-file">#</a></h2><p><code>ask --questions set.json</code> takes a JSON object keyed by name: <code>{"urgent": {"type": "noul", "instructions": "..."}, "team": {"type": "choice", "instructions": "...", "criteria": {...}}}</code>. It is the same shape the endpoint receives, useful when a set is generated by another program.</p><nav class="pager"><a href="ask.html">&larr; Ask</a><a href="context.html">Context &rarr;</a></nav></main></div><footer class="foot">jevcli judges; it does not write. Source and issues: <a href="https://github.com/muthuishere/jevcli">github.com/muthuishere/jevcli</a>.</footer>
+<script src="../site.js"></script>
+</body>
+</html>
