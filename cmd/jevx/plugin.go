@@ -1,6 +1,6 @@
 package main
 
-// jevcli plugin: list | show NAME | add NAME --on EVENT[:Tool] --ask q1,q2 [--deny|--warn|--block|--context COND]
+// jevx plugin: list | show NAME | add NAME --on EVENT[:Tool] --ask q1,q2 [--deny|--warn|--block|--context COND]
 //                [--say TEXT] [--exec CMD] [--desc TEXT] [--profile P] [--local] | remove | enable NAME|all [--act] | disable NAME|all |
 //                mode NAME shadow|act | test NAME [--payload FILE] | log [NAME] [N]
 
@@ -12,7 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/muthuishere/jevcli/core"
+	"github.com/muthuishere/jevx/core"
 )
 
 func cmdPlugin(args []string) {
@@ -21,7 +21,7 @@ func cmdPlugin(args []string) {
 	all := cfg.AllPlugins()
 	if len(args) == 0 || args[0] == "list" {
 		if len(all) == 0 {
-			pr("no plugins: jevcli plugin add NAME --on PreToolUse:Bash --ask destroys --deny \"destroys >= 0.8\"")
+			pr("no plugins: jevx plugin add NAME --on PreToolUse:Bash --ask destroys --deny \"destroys >= 0.8\"")
 			return
 		}
 		lq := core.LocalPlugins()
@@ -104,7 +104,7 @@ func cmdPlugin(args []string) {
 			}
 			pr("%d plugins %sd", len(all), args[0])
 			if on && len(core.InstalledEvents(core.SettingsPath())) == 0 {
-				pr("note: no hooks in %s yet: run `jevcli install --hooks`", core.SettingsPath())
+				pr("note: no hooks in %s yet: run `jevx install --hooks`", core.SettingsPath())
 			}
 			return
 		}
@@ -120,22 +120,22 @@ func cmdPlugin(args []string) {
 			if mode == "" {
 				mode = "shadow"
 			}
-			pr("%s enabled, mode %s%s", name, mode, map[bool]string{true: " (logs only; `jevcli plugin mode " + name + " act` to let it act)", false: ""}[mode == "shadow"])
+			pr("%s enabled, mode %s%s", name, mode, map[bool]string{true: " (logs only; `jevx plugin mode " + name + " act` to let it act)", false: ""}[mode == "shadow"])
 			if !contains(core.InstalledEvents(core.SettingsPath()), p.Event()) {
-				pr("note: no %s hook in %s yet: run `jevcli install --hooks`", p.Event(), core.SettingsPath())
+				pr("note: no %s hook in %s yet: run `jevx install --hooks`", p.Event(), core.SettingsPath())
 			}
 		}
 	case "mode":
 		p := need()
 		if len(args) < 3 || (args[2] != "shadow" && args[2] != "act") {
-			die("usage: jevcli plugin mode NAME shadow|act")
+			die("usage: jevx plugin mode NAME shadow|act")
 		}
 		p.Mode = args[2]
 		target[name] = p
 		save()
 	case "add":
 		if name == "" || strings.HasPrefix(name, "-") {
-			die(`usage: jevcli plugin add NAME --on EVENT[:Tool] --ask q1,q2 --deny|--warn|--block|--context "COND" [--say TEXT] [--exec CMD] [--desc TEXT] [--profile P] [--local]`)
+			die(`usage: jevx plugin add NAME --on EVENT[:Tool] --ask q1,q2 --deny|--warn|--block|--context "COND" [--say TEXT] [--exec CMD] [--desc TEXT] [--profile P] [--local]`)
 		}
 		fs := flag.NewFlagSet("plugin add", flag.ExitOnError)
 		p := target[name]
@@ -165,7 +165,7 @@ func cmdPlugin(args []string) {
 		for _, n := range strings.Split(p.Ask, ",") {
 			if n = strings.TrimSpace(n); n != "" {
 				if _, ok := cfg.ResolveQuestion(prof, n); !ok {
-					die("no question named %q: add it first (jevcli question add %s --noul \"...\") or use a built-in (%s)", n, n, strings.Join(builtinQuestions(prof), ", "))
+					die("no question named %q: add it first (jevx question add %s --noul \"...\") or use a built-in (%s)", n, n, strings.Join(builtinQuestions(prof), ", "))
 				}
 			}
 		}
@@ -225,7 +225,7 @@ func cmdPlugin(args []string) {
 			pr("%s  %-14s %-16s %-7s %s  %s", r["ts"], r["plugin"], r["event"], orStr(r["decision"], r["skipped"], r["error"]), ans, trunc(fmt.Sprint(orStr(r["reason"], "")), 80))
 		}
 	default:
-		die("usage: jevcli plugin list | show | add | remove | enable | disable | mode | test | log")
+		die("usage: jevx plugin list | show | add | remove | enable | disable | mode | test | log")
 	}
 }
 

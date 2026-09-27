@@ -1,6 +1,6 @@
-// Package core is jevcli: a vendor-neutral client for any System One (Jev-contract) decision endpoint (hosted,
+// Package core is jevx: a vendor-neutral client for any System One (Jev-contract) decision endpoint (hosted,
 // self-hosted or personal; set per profile), plus agent integration: a skill and config-gated hook templates that
-// `jevcli install` writes into Claude Code / Codex.
+// `jevx install` writes into Claude Code / Codex.
 package core
 
 import (
@@ -27,7 +27,7 @@ import (
 //go:embed questions.json
 var questionsJSON []byte
 
-// Questions are the texts jevcli asks. The embedded pack is neutral ("the user"); a profile may point to its own pack (a
+// Questions are the texts jevx asks. The embedded pack is neutral ("the user"); a profile may point to its own pack (a
 // model trained on specific wording should be asked in exactly that wording). Keys: noul accepts|wanted_more,
 // choice reaction, score satisfaction.
 type Questions struct {
@@ -48,7 +48,7 @@ func questions(p Profile) Questions {
 	if p.Questions != "" {
 		b, err := os.ReadFile(expand(p.Questions))
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "jevcli: question pack %s: %v (using the built-in pack)\n", p.Questions, err)
+			fmt.Fprintf(os.Stderr, "jevx: question pack %s: %v (using the built-in pack)\n", p.Questions, err)
 		} else {
 			raw = b
 		}
@@ -197,7 +197,7 @@ type Config struct {
 	Hooks      map[string]HookCfg  `json:"hooks,omitempty"` // legacy (v0.8): migrated into plugins["stop-judge"]
 	Plugins    map[string]Plugin   `json:"plugins"`
 	Defaults   Settings            `json:"defaults,omitempty"`
-	Questions  map[string]Question `json:"questions,omitempty"`             // named questions: jevcli ask NAME
+	Questions  map[string]Question `json:"questions,omitempty"`             // named questions: jevx ask NAME
 	LocalFile  string              `json:"local_context_file,omitempty"`    // file holding the folder section (default AGENTS.md, then CLAUDE.md)
 	LocalSect  string              `json:"local_context_section,omitempty"` // the section heading, global and folder (default "Jev"; any level)
 	GlobalFile string              `json:"global_context_file,omitempty"`   // global files holding the section (comma list; default below)
@@ -205,18 +205,43 @@ type Config struct {
 
 func Home() string { h, _ := os.UserHomeDir(); return h }
 func ConfigPath() string {
-	if p := os.Getenv("JEVCLI_CONFIG"); p != "" {
+	if p := firstEnv("JEVX_CONFIG", "JEVCLI_CONFIG"); p != "" {
 		return p
 	}
-	return filepath.Join(Home(), ".config/jevcli/config.json")
+	return filepath.Join(Home(), ".config/jevx/config.json")
 }
-func DataDir() string { return filepath.Join(Home(), ".local/share/jevcli") }
+func DataDir() string { return filepath.Join(Home(), ".local/share/jevx") }
+
+// firstEnv is the first set variable: the jevx name, then the old jevcli one.
+func firstEnv(names ...string) string {
+	for _, n := range names {
+		if v := os.Getenv(n); v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+// migrate moves a jevcli-era config and data dir to the jevx paths once (the tool was renamed; nothing is lost).
+func migrate() {
+	h := Home()
+	for _, pair := range [][2]string{{".config/jevcli", ".config/jevx"}, {".local/share/jevcli", ".local/share/jevx"}} {
+		old, now := filepath.Join(h, pair[0]), filepath.Join(h, pair[1])
+		if _, err := os.Stat(now); err == nil {
+			continue
+		}
+		if _, err := os.Stat(old); err == nil {
+			_ = os.MkdirAll(filepath.Dir(now), 0o700)
+			_ = os.Rename(old, now)
+		}
+	}
+}
 
 func DefaultConfig() Config {
 	return Config{
 		Default: "default",
 		Profiles: map[string]Profile{
-			"default": {URL: "", Model: "", Note: "set with: jevcli profile add NAME URL --model M --header 'Authorization: Bearer $VAR'"},
+			"default": {URL: "", Model: "", Note: "set with: jevx profile add NAME URL --model M --header 'Authorization: Bearer $VAR'"},
 		},
 		Plugins: shipped(),
 	}
@@ -224,13 +249,14 @@ func DefaultConfig() Config {
 
 // LoadConfig reads the user's config; the built-in profiles only seed a config that does not exist yet.
 func LoadConfig() Config {
+	migrate()
 	b, err := os.ReadFile(ConfigPath())
 	if err != nil {
 		return DefaultConfig()
 	}
 	var c Config
 	if json.Unmarshal(b, &c) != nil {
-		fmt.Fprintf(os.Stderr, "jevcli: %s is not valid JSON; using built-in defaults\n", ConfigPath())
+		fmt.Fprintf(os.Stderr, "jevx: %s is not valid JSON; using built-in defaults\n", ConfigPath())
 		return DefaultConfig()
 	}
 	if c.Profiles == nil {
@@ -278,7 +304,7 @@ func (c Config) Profile(name string) (string, Profile, error) {
 		return name, p, fmt.Errorf("no profile %q (have: %s)", name, strings.Join(keys(c.Profiles), ", "))
 	}
 	if p.URL == "" {
-		return name, p, fmt.Errorf("profile %q has no url: jevcli profile add %s URL --model M [--header 'K: V']", name, name)
+		return name, p, fmt.Errorf("profile %q has no url: jevx profile add %s URL --model M [--header 'K: V']", name, name)
 	}
 	return name, p, nil
 }
@@ -293,8 +319,8 @@ func keys[V any](m map[string]V) []string {
 }
 
 // WithContext prepends the configured standing context (global, then the profile's) to a state. Context is the user's
-// own data in their config: jevcli ships none.
-// LocalDir is the nearest .jevcli folder from the working directory up (like .git), or "" when there is none.
+// own data in their config: jevx ships none.
+// LocalDir is the nearest .jevx folder from the working directory up (like .git), or "" when there is none.
 // It holds folder-level questions.json that apply to every call made inside that folder.
 func LocalDir() string {
 	d, err := os.Getwd()
@@ -302,8 +328,10 @@ func LocalDir() string {
 		return ""
 	}
 	for {
-		if st, err := os.Stat(filepath.Join(d, ".jevcli")); err == nil && st.IsDir() && filepath.Join(d, ".jevcli") != filepath.Join(Home(), ".jevcli") {
-			return filepath.Join(d, ".jevcli")
+		for _, n := range []string{".jevx", ".jevcli"} { // .jevcli: the folder name before the rename
+			if st, err := os.Stat(filepath.Join(d, n)); err == nil && st.IsDir() && d != Home() {
+				return filepath.Join(d, n)
+			}
 		}
 		up := filepath.Dir(d)
 		if up == d {
@@ -463,7 +491,7 @@ func Section(md, name string) (string, bool) {
 	return "", false
 }
 
-// LocalQuestions are the named questions of the nearest .jevcli folder (they override global ones with the same name).
+// LocalQuestions are the named questions of the nearest .jevx folder (they override global ones with the same name).
 func LocalQuestions() map[string]Question {
 	m := map[string]Question{}
 	if d := LocalDir(); d != "" {
@@ -671,10 +699,10 @@ func validate(qs map[string]any, ans map[string]Answer) error {
 	return nil
 }
 
-// ledger appends one JSON line per call to ~/.local/share/jevcli/calls.jsonl: host, model, question count and hash,
-// tokens, latency, error. Never the state, the question text or a header. JEVCLI_LEDGER=off disables it.
+// ledger appends one JSON line per call to ~/.local/share/jevx/calls.jsonl: host, model, question count and hash,
+// tokens, latency, error. Never the state, the question text or a header. JEVX_LEDGER=off disables it.
 func ledger(p Profile, qs map[string]any, model string, usage map[string]any, d time.Duration, err error) {
-	if !LedgerOn || os.Getenv("JEVCLI_LEDGER") == "off" {
+	if !LedgerOn || firstEnv("JEVX_LEDGER", "JEVCLI_LEDGER") == "off" {
 		return
 	}
 	host := p.URL
@@ -689,7 +717,7 @@ func ledger(p Profile, qs map[string]any, model string, usage map[string]any, d 
 		row["error"] = trimErr(err.Error())
 	}
 	b, _ := json.Marshal(row)
-	path := filepath.Join(Home(), ".local/share/jevcli/calls.jsonl")
+	path := filepath.Join(Home(), ".local/share/jevx/calls.jsonl")
 	_ = os.MkdirAll(filepath.Dir(path), 0o755)
 	if f, e := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600); e == nil {
 		_, _ = f.Write(append(b, '\n'))
@@ -984,9 +1012,9 @@ func Detach(args []string, stdinFile string) error {
 
 const HookMarker = " hook run "
 
-// isOurHook matches our hook command on every OS: `/x/jevcli hook run stop`, `"C:\x\jevcli.exe" hook run stop`.
+// isOurHook matches our hook command on every OS: `/x/jevx hook run stop`, `"C:\x\jevx.exe" hook run stop`.
 func isOurHook(c string) bool {
-	return strings.Contains(c, "jevcli") && strings.Contains(c, HookMarker)
+	return (strings.Contains(c, "jevx") || strings.Contains(c, "jevcli")) && strings.Contains(c, HookMarker)
 }
 
 // SettingsPath is the REAL Claude Code user settings file (~/.claude/settings.json may be a symlink).
@@ -1018,13 +1046,13 @@ func writeJSON(p string, m map[string]any) error {
 	_ = os.MkdirAll(filepath.Dir(p), 0o755)
 	if _, err := os.Stat(p); err == nil {
 		b, _ := os.ReadFile(p)
-		_ = os.WriteFile(fmt.Sprintf("%s.bak-jevcli-%s-%d", p, time.Now().Format("20060102-150405"), os.Getpid()), b, 0o600)
+		_ = os.WriteFile(fmt.Sprintf("%s.bak-jevx-%s-%d", p, time.Now().Format("20060102-150405"), os.Getpid()), b, 0o600)
 	}
 	b, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
 		return err
 	}
-	tmp := p + ".tmp-jevcli"
+	tmp := p + ".tmp-jevx"
 	if err := os.WriteFile(tmp, append(b, '\n'), 0o600); err != nil {
 		return err
 	}

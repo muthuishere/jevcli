@@ -16,7 +16,7 @@ jobs:
       url: ${{ steps.d.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
-      - run: cp install.sh install.cmd docs/ && cp cmd/jevcli/skill/SKILL.md docs/skill.md
+      - run: cp install.sh install.cmd docs/ && cp cmd/jevx/skill/SKILL.md docs/skill.md
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

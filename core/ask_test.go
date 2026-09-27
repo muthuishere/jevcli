@@ -28,7 +28,7 @@ func status(c int) func(http.ResponseWriter) { return func(w http.ResponseWriter
 var noulQ = map[string]any{"q": map[string]any{"type": "noul", "instructions": "Is it?"}}
 
 func TestAskRawValidates(t *testing.T) {
-	t.Setenv("JEVCLI_LEDGER", "off")
+	t.Setenv("JEVX_LEDGER", "off")
 	choiceQ := map[string]any{"c": map[string]any{"type": "choice", "instructions": "Which?", "criteria": map[string]string{"a": "A", "b": "B"}}}
 	cases := []struct {
 		name  string
@@ -56,7 +56,7 @@ func TestAskRawValidates(t *testing.T) {
 }
 
 func TestAskRawRetries(t *testing.T) {
-	t.Setenv("JEVCLI_LEDGER", "off")
+	t.Setenv("JEVX_LEDGER", "off")
 	s, n := server(t, status(503), status(429), body(`{"answers":{"q":{"type":"noul","noul":0.5}}}`))
 	if _, _, err := AskRaw(Profile{URL: s.URL}, "s", noulQ, 5*time.Second); err != nil || *n != 3 {
 		t.Fatalf("want success on the 3rd try, got err=%v after %d calls", err, *n)

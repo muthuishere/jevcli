@@ -1,6 +1,6 @@
 package main
 
-// jevcli ask: the one call. Questions come by NAME from config (`jevcli question add`) and/or inline
+// jevx ask: the one call. Questions come by NAME from config (`jevx question add`) and/or inline
 // (--noul / --choice / --score); inputs from stdin, --in, --lines or --states. Every threshold and knob comes from
 // config with defaults (core.Builtin < config "defaults" < profile "defaults" < flags).
 //
@@ -22,7 +22,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/muthuishere/jevcli/core"
+	"github.com/muthuishere/jevx/core"
 )
 
 func text(v string) string {
@@ -241,9 +241,9 @@ func cmdAsk(args []string) {
 	prof := fs.String("profile", "", "endpoint profile")
 	asJSON := fs.Bool("json", false, "one input: print JSON instead of lines")
 	raw := fs.Bool("raw", false, "one input: print the server's full response")
-	yes := fs.Float64("yes", -1, "override: noul P at or above is yes (default from `jevcli defaults`)")
-	no := fs.Float64("no", -1, "override: noul P at or below is no (default from `jevcli defaults`)")
-	minC := fs.Float64("min", -1, "override: choice / score confidence below is unsure (default from `jevcli defaults`)")
+	yes := fs.Float64("yes", -1, "override: noul P at or above is yes (default from `jevx defaults`)")
+	no := fs.Float64("no", -1, "override: noul P at or below is no (default from `jevx defaults`)")
+	minC := fs.Float64("min", -1, "override: choice / score confidence below is unsure (default from `jevx defaults`)")
 	par := fs.Int("parallel", 0, "override: concurrent requests in a batch")
 	var nouls, choices, scores, ctxs multi
 	fs.Var(&ctxs, "context", "background for this call: TEXT or @file (repeat); added after the ## Jev sections")
@@ -285,7 +285,7 @@ func cmdAsk(args []string) {
 		all := allQuestions(cfg)
 		q, ok := all[n]
 		if !ok {
-			die("no question named %q (have: %s). Add one: jevcli question add %s --noul \"...\"", n, strings.Join(keys(all), ", "), n)
+			die("no question named %q (have: %s). Add one: jevx question add %s --noul \"...\"", n, strings.Join(keys(all), ", "), n)
 		}
 		qs[n] = normQ(q)
 	}
@@ -305,7 +305,7 @@ func cmdAsk(args []string) {
 		}
 	}
 	if len(qs) == 0 {
-		die("usage: jevcli ask NAME[,NAME...] | --noul NAME=\"QUESTION\" ...  [--in X | --lines FILE | --states FILE.jsonl | < stdin]\n  named questions: jevcli question list")
+		die("usage: jevx ask NAME[,NAME...] | --noul NAME=\"QUESTION\" ...  [--in X | --lines FILE | --states FILE.jsonl | < stdin]\n  named questions: jevx question list")
 	}
 
 	// A batch: --lines or --states.
@@ -414,7 +414,7 @@ func batch(cfg core.Config, p core.Profile, qs map[string]core.Question, set cor
 	for _, r := range rows {
 		if r.Error != "" {
 			code = 4
-			fmt.Fprintf(os.Stderr, "jevcli: line %d: %s\n", r.Line, r.Error)
+			fmt.Fprintf(os.Stderr, "jevx: line %d: %s\n", r.Line, r.Error)
 		}
 	}
 	if outMode == "filter" || outMode == "filter-v" || outMode == "rank" {
@@ -465,7 +465,7 @@ func round2(v float64) float64 { return math.Round(v*100) / 100 }
 
 // ------------------------------------------------------------------ named questions + settings
 
-// allQuestions merges global questions with the nearest .jevcli folder's (the folder wins on a name clash).
+// allQuestions merges global questions with the nearest .jevx folder's (the folder wins on a name clash).
 func allQuestions(cfg core.Config) map[string]core.Question {
 	m := map[string]core.Question{}
 	for k, q := range cfg.Questions {
@@ -477,7 +477,7 @@ func allQuestions(cfg core.Config) map[string]core.Question {
 	return m
 }
 
-// takeLocal removes --local from args; with it, question / context commands write to ./.jevcli (created if missing).
+// takeLocal removes --local from args; with it, question / context commands write to ./.jevx (created if missing).
 func takeLocal(args []string) ([]string, bool) {
 	var out []string
 	local := false
@@ -491,13 +491,13 @@ func takeLocal(args []string) ([]string, bool) {
 	return out, local
 }
 
-// localDir is the folder --local writes to: the nearest existing .jevcli, else ./.jevcli.
+// localDir is the folder --local writes to: the nearest existing .jevx, else ./.jevx.
 func localDir() string {
 	if d := core.LocalDir(); d != "" {
 		return d
 	}
 	wd, _ := os.Getwd()
-	d := filepath.Join(wd, ".jevcli")
+	d := filepath.Join(wd, ".jevx")
 	if err := os.MkdirAll(d, 0o755); err != nil {
 		die("%v", err)
 	}
@@ -510,7 +510,7 @@ func cmdQuestion(args []string) {
 	if len(args) == 0 || args[0] == "list" {
 		lq := core.LocalQuestions()
 		if len(cfg.Questions)+len(lq) == 0 {
-			pr("no named questions yet: jevcli question add NAME --noul \"QUESTION\" [--local]")
+			pr("no named questions yet: jevx question add NAME --noul \"QUESTION\" [--local]")
 			return
 		}
 		for _, k := range keys(cfg.Questions) {
@@ -532,7 +532,7 @@ func cmdQuestion(args []string) {
 	switch args[0] {
 	case "show":
 		if len(args) < 2 {
-			die("usage: jevcli question show NAME")
+			die("usage: jevx question show NAME")
 		}
 		q, ok := allQuestions(cfg)[args[1]]
 		if !ok {
@@ -543,12 +543,12 @@ func cmdQuestion(args []string) {
 		return
 	case "remove", "rm":
 		if len(args) < 2 {
-			die("usage: jevcli question remove NAME")
+			die("usage: jevx question remove NAME")
 		}
 		delete(cfg.Questions, args[1])
 	case "add":
 		if len(args) < 2 || strings.HasPrefix(args[1], "-") {
-			die(`usage: jevcli question add NAME --noul "QUESTION" | --choice "QUESTION|k=desc;k2=desc" | --score "QUESTION|low;mid;high" [--yes 0.85 --no 0.15 --min 0.6]`)
+			die(`usage: jevx question add NAME --noul "QUESTION" | --choice "QUESTION|k=desc;k2=desc" | --score "QUESTION|low;mid;high" [--yes 0.85 --no 0.15 --min 0.6]`)
 		}
 		fs := flag.NewFlagSet("question add", flag.ExitOnError)
 		nq, cq, sq := fs.String("noul", "", "a yes/no question"), fs.String("choice", "", "QUESTION|key=desc;..."), fs.String("score", "", "QUESTION|level0;level1;...")
@@ -583,7 +583,7 @@ func cmdQuestion(args []string) {
 		}
 		cfg.Questions[args[1]] = q
 	default:
-		die("usage: jevcli question list | show NAME | add NAME --noul|--choice|--score ... | remove NAME   [--local]")
+		die("usage: jevx question list | show NAME | add NAME --noul|--choice|--score ... | remove NAME   [--local]")
 	}
 	if local {
 		path := filepath.Join(localDir(), "questions.json")
@@ -603,7 +603,7 @@ func cmdQuestion(args []string) {
 // settingKeys maps the config keys to their Settings fields.
 var settingKeys = []string{"yes", "no", "min_confidence", "parallel", "retries", "timeout_s", "chunk", "ledger", "accept_min", "more_max"}
 
-// cmdDefaults: jevcli defaults [--profile P] | set KEY VALUE [--profile P] | unset KEY [--profile P].
+// cmdDefaults: jevx defaults [--profile P] | set KEY VALUE [--profile P] | unset KEY [--profile P].
 func cmdDefaults(args []string) {
 	cfg := core.LoadConfig()
 	prof := ""
@@ -641,7 +641,7 @@ func cmdDefaults(args []string) {
 		return
 	}
 	if len(rest) < 2 || (rest[0] == "set" && len(rest) < 3) {
-		die("usage: jevcli defaults [show] | set KEY VALUE | unset KEY  [--profile P]   keys: %s", strings.Join(settingKeys, ", "))
+		die("usage: jevx defaults [show] | set KEY VALUE | unset KEY  [--profile P]   keys: %s", strings.Join(settingKeys, ", "))
 	}
 	b, _ := json.Marshal(*target)
 	var m map[string]any
@@ -663,7 +663,7 @@ func cmdDefaults(args []string) {
 	case "unset":
 		delete(m, k)
 	default:
-		die("usage: jevcli defaults set KEY VALUE | unset KEY")
+		die("usage: jevx defaults set KEY VALUE | unset KEY")
 	}
 	b, _ = json.Marshal(m)
 	var ns core.Settings
@@ -680,11 +680,11 @@ func cmdDefaults(args []string) {
 	pr("saved %s", core.ConfigPath())
 }
 
-// cmdContext shows the context sent with every call and where each part comes from. jevcli never writes it: the user
+// cmdContext shows the context sent with every call and where each part comes from. jevx never writes it: the user
 // edits the "## Jev" section of their own agent files by hand.
 func cmdContext(args []string) {
 	if len(args) > 0 && args[0] != "show" {
-		die("jevcli only reads context. Edit the \"## Jev\" section of your AGENTS.md / CLAUDE.md (global or in the repo); see: jevcli context")
+		die("jevx only reads context. Edit the \"## Jev\" section of your AGENTS.md / CLAUDE.md (global or in the repo); see: jevx context")
 	}
 	cfg := core.LoadConfig()
 	sect := cfg.LocalSection()
@@ -715,10 +715,10 @@ func cmdContext(args []string) {
 
 // cmdVerb is the shortcut layer: each verb is one question through cmdAsk, with the same config, context and settings.
 //
-//	jevcli is "QUESTION"|NAME [input]           yes / no / unsure + P; exit 0 / 1 / 3 (4 on error)
-//	jevcli pick "QUESTION" key=desc ... [input]  the chosen key + confidence; exit 3 when unsure
-//	jevcli filter "QUESTION"|NAME [lines] [-v]   the input lines whose answer is yes (-v: the rest), like grep
-//	jevcli rank "QUESTION"|NAME [lines] [--top N] every line with P(yes), best first
+//	jevx is "QUESTION"|NAME [input]           yes / no / unsure + P; exit 0 / 1 / 3 (4 on error)
+//	jevx pick "QUESTION" key=desc ... [input]  the chosen key + confidence; exit 3 when unsure
+//	jevx filter "QUESTION"|NAME [lines] [-v]   the input lines whose answer is yes (-v: the rest), like grep
+//	jevx rank "QUESTION"|NAME [lines] [--top N] every line with P(yes), best first
 //
 // Input: stdin, --in, --lines or --states, as for ask. filter / rank read lines from stdin when none is given.
 func cmdVerb(verb string, args []string) {
@@ -748,7 +748,7 @@ func cmdVerb(verb string, args []string) {
 		pos = append(pos, a)
 	}
 	if len(pos) == 0 {
-		die("usage: jevcli %s \"QUESTION\"|NAME ...  (see: jevcli help)", verb)
+		die("usage: jevx %s \"QUESTION\"|NAME ...  (see: jevx help)", verb)
 	}
 	q := pos[0]
 	var qflag []string
@@ -759,7 +759,7 @@ func cmdVerb(verb string, args []string) {
 		qflag = []string{q}
 	} else if verb == "pick" {
 		if len(pos) < 3 {
-			die(`usage: jevcli pick "QUESTION" key=desc key2=desc ...`)
+			die(`usage: jevx pick "QUESTION" key=desc key2=desc ...`)
 		}
 		qflag = []string{"--choice", "pick=" + q + "|" + strings.Join(pos[1:], ";")}
 	} else {

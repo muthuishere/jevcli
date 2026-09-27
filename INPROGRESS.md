@@ -1,4 +1,13 @@
-# INPROGRESS: jevcli live state
+# INPROGRESS: jevx live state (repo: jevcli)
+
+## Renamed to jevx (2026-09-27)
+The command, skill, config (`~/.config/jevx`), data (`~/.local/share/jevx`), folder dir (`.jevx/`), env vars (`JEVX_*`)
+and release assets (`jevx_<os>_<arch>`) are jevx; the repo, Go module and site URL stay jevcli. Back-compat: the old
+config/data dirs are moved on first run, `.jevcli/` and `JEVCLI_*` are still read, old skill dirs and old hook entries are
+replaced on install. Code: `cmd/jevx/`. npm package `jevx` (`npm/`): postinstall downloads the release binary for the
+platform (counted by GitHub Releases), then runs `jevx install`; published by the `npm` job in release.yml when the repo
+has an `NPM_TOKEN` secret.
+
 
 Last updated: 2026-09-27. Read `README.md` for usage; this file is what exists, what is verified, and what is next.
 
@@ -116,7 +125,7 @@ and `ask` (JSONL over `--in` / `--lines` / `--states`, with `--is` / `--which` /
   --parallel 8; JSONL out in input order, a bad line reports its error and the exit code is 1. `core.AskRaw` is race-free.
 
 ## Distribution (2026-09-27)
-Repo public. Site https://muthuishere.github.io/jevcli/ (`docs/`, `pages.yml`). Tag `v*` -> `release.yml` builds 6 binaries.
+Repo public. Site https://muthuishere.github.io/jevx/ (`docs/`, `pages.yml`). Tag `v*` -> `release.yml` builds 6 binaries.
 `install.sh` / `install.cmd` -> binary + `jevcli install` (skills in ~/.claude, ~/.agents, ~/.codex if present; Stop hook
 template, disabled). Verified end to end: macOS arm64 (curl|sh), Linux (alpine docker), Windows arm64 (agentbus, a home
 path with a space; reinstall idempotent, uninstall clean).

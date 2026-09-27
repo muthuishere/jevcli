@@ -1,0 +1,14 @@
+{
+  "name": "jevx",
+  "version": "0.0.0",
+  "description": "Agent skill + CLI for fast typed judgements (yes/no, pick-one, rating) from any Jev-style System One endpoint. Installs the jevx binary from GitHub Releases.",
+  "keywords": ["jev", "system-one", "claude-code", "codex", "agent-skill", "hooks", "cli"],
+  "homepage": "https://muthuishere.github.io/jevx/",
+  "repository": { "type": "git", "url": "git+https://github.com/muthuishere/jevx.git" },
+  "bugs": "https://github.com/muthuishere/jevx/issues",
+  "license": "MIT",
+  "bin": { "jevx": "bin/jevx.js" },
+  "scripts": { "postinstall": "node install.js" },
+  "files": ["bin/jevx.js", "install.js", "README.md"],
+  "engines": { "node": ">=18" }
+}

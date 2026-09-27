@@ -1,3 +1,3 @@
-module github.com/muthuishere/jevcli
+module github.com/muthuishere/jevx
 
 go 1.26

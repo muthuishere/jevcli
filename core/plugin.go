@@ -1,6 +1,6 @@
 package core
 
-// Plugins: a hook behaviour declared in config, run by the one generic hook runner (`jevcli hook run EVENT`).
+// Plugins: a hook behaviour declared in config, run by the one generic hook runner (`jevx hook run EVENT`).
 //
 //	{"on": "PreToolUse:Bash", "ask": "destroys,remote", "deny": "destroys >= 0.8", "warn": "remote >= 0.5"}
 //
@@ -55,7 +55,7 @@ var Shipped = map[string]Plugin{
 		Say: "This request looks simple ({{kind}}). Delegate it to one sub-agent with model haiku titled \"{{kind}}: <the task in 4 words>\" and return its result to the user; do not do it in this session."},
 }
 
-// LocalPlugins are the nearest .jevcli/plugins.json (they override global ones with the same name).
+// LocalPlugins are the nearest .jevx/plugins.json (they override global ones with the same name).
 func LocalPlugins() map[string]Plugin {
 	m := map[string]Plugin{}
 	if d := LocalDir(); d != "" {
@@ -305,7 +305,7 @@ func (c Config) Run(name string, pl Plugin, event string, p Payload) (Decision, 
 			return fail(err)
 		}
 		if hit {
-			reason := fmt.Sprintf("jevcli %s: %s (%s: %s)", name, summarize(ans), act.name, act.cond)
+			reason := fmt.Sprintf("jevx %s: %s (%s: %s)", name, summarize(ans), act.name, act.cond)
 			if pl.Say != "" {
 				reason = fill(pl.Say, ans)
 			}
@@ -453,7 +453,7 @@ func (c Config) HookEvents() []string {
 }
 
 // InstallHooks adds one entry per event to the agent's settings.json (idempotent) and removes ours for events that no
-// longer have a plugin. Installed is not enabled: `jevcli hook run EVENT` does nothing unless a plugin is enabled.
+// longer have a plugin. Installed is not enabled: `jevx hook run EVENT` does nothing unless a plugin is enabled.
 func (c Config) InstallHooks(settings string) (added, removed int, err error) {
 	m, err := readJSON(settings)
 	if err != nil {
@@ -469,19 +469,28 @@ func (c Config) InstallHooks(settings string) (added, removed int, err error) {
 		want[e] = true
 	}
 	self, _ := os.Executable()
+	cmd := func(e string) string { return `"` + self + `" hook run ` + e }
 	for e := range want {
 		list, _ := hooks[e].([]any)
-		have := false
+		var keep []any
+		current := false
 		for _, x := range list {
-			if isOurs(x) {
-				have = true
+			if !isOurs(x) {
+				keep = append(keep, x)
+				continue
+			}
+			if c := firstCommand(x); c == cmd(e) && !current {
+				current = true
+				keep = append(keep, x)
+			} else {
+				removed++ // an entry for an older binary path or the jevcli name: replaced below
 			}
 		}
-		if !have {
-			list = append(list, map[string]any{"hooks": []any{map[string]any{"type": "command", "command": `"` + self + `" hook run ` + e, "timeout": 20}}})
-			hooks[e] = list
+		if !current {
+			keep = append(keep, map[string]any{"hooks": []any{map[string]any{"type": "command", "command": cmd(e), "timeout": 20}}})
 			added++
 		}
+		hooks[e] = keep
 	}
 	for e, v := range hooks {
 		if want[e] {
@@ -509,7 +518,19 @@ func (c Config) InstallHooks(settings string) (added, removed int, err error) {
 	return added, removed, writeJSON(settings, m)
 }
 
-// RemoveHooks removes every jevcli entry from settings.json, whatever the event.
+func firstCommand(entry any) string {
+	e, _ := entry.(map[string]any)
+	hs, _ := e["hooks"].([]any)
+	for _, h := range hs {
+		hm, _ := h.(map[string]any)
+		if c, _ := hm["command"].(string); c != "" {
+			return c
+		}
+	}
+	return ""
+}
+
+// RemoveHooks removes every jevx entry from settings.json, whatever the event.
 func RemoveHooks(settings string) (int, error) {
 	m, err := readJSON(settings)
 	if err != nil {
@@ -540,7 +561,7 @@ func RemoveHooks(settings string) (int, error) {
 	return n, writeJSON(settings, m)
 }
 
-// InstalledEvents lists the events that have a jevcli entry in settings.json.
+// InstalledEvents lists the events that have a jevx entry in settings.json.
 func InstalledEvents(settings string) []string {
 	m, _ := readJSON(settings)
 	hooks, _ := m["hooks"].(map[string]any)

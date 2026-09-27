@@ -18,10 +18,28 @@ jobs:
           for t in darwin/arm64 darwin/amd64 linux/arm64 linux/amd64 windows/amd64 windows/arm64; do
             os=${t%/*}; arch=${t#*/}; ext=; [ "$os" = windows ] && ext=.exe
             CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -trimpath -ldflags "-s -w -X main.version=${GITHUB_REF_NAME}" \
-              -o "dist/jevcli_${os}_${arch}${ext}" ./cmd/jevcli
+              -o "dist/jevx_${os}_${arch}${ext}" ./cmd/jevx
           done
           (cd dist && sha256sum * > checksums.txt)
       - name: release
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release create "$GITHUB_REF_NAME" dist/* --generate-notes
+
+  npm:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+      - name: publish jevx
+        if: ${{ env.NODE_AUTH_TOKEN != '' }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        working-directory: npm
+        run: |
+          npm version "${GITHUB_REF_NAME#v}" --no-git-tag-version
+          npm publish --access public

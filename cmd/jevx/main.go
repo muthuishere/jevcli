@@ -1,13 +1,13 @@
-// jevcli: ask any System One (Jev-contract) endpoint what the user would decide, and wire it into agents.
+// jevx: ask any System One (Jev-contract) endpoint what the user would decide, and wire it into agents.
 //
-//	jevcli ask QUESTION [--context TEXT|-] [--option KEY=DESC ... | --true DESC --false DESC] [--profile P] [--json]
-//	jevcli query --state TEXT|JSON|@file|- --noul NAME=INSTRUCTIONS ... [--choice NAME="INSTR|k=desc;k2=desc"] [--score NAME="INSTR|L0;L1;L2"] [--raw]
-//	jevcli judge --request TEXT --proposal TEXT [--action LINE ...] [--profile P] [--json]
-//	jevcli install [--no-skill] [--no-hook]     skill into Claude Code + Codex, Stop-hook template (inert until enabled)
-//	jevcli uninstall                            remove the skill links and the hook template
-//	jevcli hook enable|disable stop | mode shadow|block | profile NAME | status | review [N] | run stop
-//	jevcli config show | set-endpoint PROFILE URL [MODEL] | default PROFILE
-//	jevcli profile list | add NAME URL [--model M] [--header 'K: V' ...] [--questions FILE] [--context TEXT] | use NAME | remove NAME | show NAME
+//	jevx ask QUESTION [--context TEXT|-] [--option KEY=DESC ... | --true DESC --false DESC] [--profile P] [--json]
+//	jevx query --state TEXT|JSON|@file|- --noul NAME=INSTRUCTIONS ... [--choice NAME="INSTR|k=desc;k2=desc"] [--score NAME="INSTR|L0;L1;L2"] [--raw]
+//	jevx judge --request TEXT --proposal TEXT [--action LINE ...] [--profile P] [--json]
+//	jevx install [--no-skill] [--no-hook]     skill into Claude Code + Codex, Stop-hook template (inert until enabled)
+//	jevx uninstall                            remove the skill links and the hook template
+//	jevx hook enable|disable stop | mode shadow|block | profile NAME | status | review [N] | run stop
+//	jevx config show | set-endpoint PROFILE URL [MODEL] | default PROFILE
+//	jevx profile list | add NAME URL [--model M] [--header 'K: V' ...] [--questions FILE] [--context TEXT] | use NAME | remove NAME | show NAME
 package main
 
 import (
@@ -26,7 +26,7 @@ import (
 
 	"time"
 
-	"github.com/muthuishere/jevcli/core"
+	"github.com/muthuishere/jevx/core"
 )
 
 // version is set at release time with -ldflags "-X main.version=v1.2.3".
@@ -35,8 +35,8 @@ var version = "dev"
 //go:embed skill
 var skillFS embed.FS
 
-// die exits 4: an error is never a "no" (1) or "unsure" (3), so `if jevcli is ...` cannot mistake an outage for an answer.
-func die(f string, a ...any) { fmt.Fprintf(os.Stderr, "jevcli: "+f+"\n", a...); os.Exit(4) }
+// die exits 4: an error is never a "no" (1) or "unsure" (3), so `if jevx is ...` cannot mistake an outage for an answer.
+func die(f string, a ...any) { fmt.Fprintf(os.Stderr, "jevx: "+f+"\n", a...); os.Exit(4) }
 
 type multi []string
 
@@ -69,7 +69,7 @@ func cmdJudge(args []string) {
 	fs.BoolVar(&core.NoContext, "no-context", false, "skip the ## Jev sections of the global and folder agent files")
 	_ = fs.Parse(args)
 	if *reqT == "" || *prop == "" {
-		die("usage: jevcli judge --request TEXT --proposal TEXT [--action LINE ...]")
+		die("usage: jevx judge --request TEXT --proposal TEXT [--action LINE ...]")
 	}
 	cfg := core.LoadConfig()
 	name, p, err := cfg.Profile(*prof)
@@ -153,8 +153,9 @@ func cmdInstall(args []string) {
 	}
 	if !noSkill {
 		for _, d := range skillDirs() {
-			dst := filepath.Join(d, "jevcli")
-			_ = os.RemoveAll(dst) // a reinstall leaves no stale files from an older skill
+			dst := filepath.Join(d, "jevx")
+			_ = os.RemoveAll(filepath.Join(d, "jevcli")) // the skill's name before the rename
+			_ = os.RemoveAll(dst)                        // a reinstall leaves no stale files from an older skill
 			err := iofs.WalkDir(skillFS, "skill", func(p string, e iofs.DirEntry, _ error) error {
 				out := filepath.Join(dst, strings.TrimPrefix(strings.TrimPrefix(p, "skill"), "/"))
 				if e.IsDir() {
@@ -180,7 +181,7 @@ func cmdInstall(args []string) {
 				on++
 			}
 		}
-		pr("hooks    %s: %d added, %d removed in %s; %d of %d plugins enabled (jevcli plugin list)",
+		pr("hooks    %s: %d added, %d removed in %s; %d of %d plugins enabled (jevx plugin list)",
 			strings.Join(cfg.HookEvents(), ", "), added, removed, core.SettingsPath(), on, len(cfg.AllPlugins()))
 	}
 }
@@ -201,9 +202,11 @@ func cmdUninstall(args []string) {
 		goto hook
 	}
 	for _, d := range skillDirs() {
-		if _, err := os.Stat(filepath.Join(d, "jevcli", "SKILL.md")); err == nil {
-			_ = os.RemoveAll(filepath.Join(d, "jevcli"))
-			pr("skill removed  %s", filepath.Join(d, "jevcli"))
+		for _, n := range []string{"jevx", "jevcli"} {
+			if _, err := os.Stat(filepath.Join(d, n, "SKILL.md")); err == nil {
+				_ = os.RemoveAll(filepath.Join(d, n))
+				pr("skill removed  %s", filepath.Join(d, n))
+			}
 		}
 	}
 hook:
@@ -222,12 +225,12 @@ hook:
 // cmdHook: `hook run EVENT` is what settings.json calls; the rest are conveniences over `plugin`.
 func cmdHook(args []string) {
 	if len(args) == 0 {
-		die("usage: jevcli hook run EVENT | status | review [N] | enable|disable stop  (plugins: jevcli plugin)")
+		die("usage: jevx hook run EVENT | status | review [N] | enable|disable stop  (plugins: jevx plugin)")
 	}
 	switch args[0] {
 	case "run":
 		if len(args) < 2 {
-			die("usage: jevcli hook run EVENT")
+			die("usage: jevx hook run EVENT")
 		}
 		hookRun(args[1], args[2:])
 	case "status":
@@ -303,7 +306,7 @@ func hookRun(event string, args []string) {
 		return
 	}
 	if len(shadow) > 0 {
-		f, err := os.CreateTemp("", "jevcli-hook-*.json")
+		f, err := os.CreateTemp("", "jevx-hook-*.json")
 		if err == nil {
 			_, _ = f.Write(raw)
 			f.Close()
@@ -435,7 +438,7 @@ func cmdConfig(args []string) {
 	switch args[0] {
 	case "set-endpoint":
 		if len(args) < 3 {
-			die("usage: jevcli config set-endpoint PROFILE URL [MODEL]  (headers: jevcli profile add … --header 'K: V')")
+			die("usage: jevx config set-endpoint PROFILE URL [MODEL]  (headers: jevx profile add … --header 'K: V')")
 		}
 		p := cfg.Profiles[args[1]]
 		p.URL = args[2]
@@ -448,14 +451,14 @@ func cmdConfig(args []string) {
 		cfg.Profiles[args[1]] = p
 	case "default":
 		if len(args) < 2 {
-			die("usage: jevcli config default PROFILE")
+			die("usage: jevx config default PROFILE")
 		}
 		if _, _, err := cfg.Profile(args[1]); err != nil {
 			die("%v", err)
 		}
 		cfg.Default = args[1]
 	default:
-		die("usage: jevcli config show | set-endpoint PROFILE URL [MODEL] [KEY_ENV] | default PROFILE")
+		die("usage: jevx config show | set-endpoint PROFILE URL [MODEL] [KEY_ENV] | default PROFILE")
 	}
 	if err := core.SaveConfig(cfg); err != nil {
 		die("%v", err)
@@ -465,13 +468,13 @@ func cmdConfig(args []string) {
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: jevcli ask|is|pick|filter|rank|question|context|defaults|judge|plugin|hook|profile|stats|install|uninstall|skill|version")
+		fmt.Fprintln(os.Stderr, "usage: jevx ask|is|pick|filter|rank|question|context|defaults|judge|plugin|hook|profile|stats|install|uninstall|skill|version")
 		os.Exit(2)
 	}
 	a := takeCwd(os.Args[2:])
 	switch os.Args[1] {
 	case "help", "-h", "--help":
-		pr("usage: jevcli ask|is|pick|filter|rank|question|context|defaults|judge|plugin|hook|profile|stats|install|uninstall|skill|version\n  jevcli COMMAND -h for flags; jevcli skill for the full guide; https://muthuishere.github.io/jevcli/")
+		pr("usage: jevx ask|is|pick|filter|rank|question|context|defaults|judge|plugin|hook|profile|stats|install|uninstall|skill|version\n  jevx COMMAND -h for flags; jevx skill for the full guide; https://muthuishere.github.io/jevx/")
 	case "ask", "a":
 		cmdAsk(a)
 	case "is", "pick", "filter", "rank":
@@ -497,7 +500,7 @@ func main() {
 	case "stats":
 		cmdStats(a)
 	case "version", "--version", "-v":
-		pr("jevcli %s", version)
+		pr("jevx %s", version)
 	case "skill", "cookbook":
 		b, _ := skillFS.ReadFile("skill/SKILL.md")
 		os.Stdout.Write(b)
@@ -523,12 +526,12 @@ func cmdProfile(args []string) {
 			}
 			pr("%s %-10s %s  model=%s%s", mark, n, p.URL, p.Model, hs)
 		}
-		pr("(* = default; change with: jevcli profile use NAME)")
+		pr("(* = default; change with: jevx profile use NAME)")
 		return
 	}
 	need := func(n int, u string) {
 		if len(args) < n {
-			die("usage: jevcli profile %s", u)
+			die("usage: jevx profile %s", u)
 		}
 	}
 	switch args[0] {
@@ -572,7 +575,7 @@ func cmdProfile(args []string) {
 		pr("%s", b)
 		return
 	default:
-		die("usage: jevcli profile list | add | use | remove | show")
+		die("usage: jevx profile list | add | use | remove | show")
 	}
 	if err := core.SaveConfig(cfg); err != nil {
 		die("%v", err)
@@ -597,7 +600,7 @@ func cmdStats(args []string) {
 	fs := flag.NewFlagSet("stats", flag.ExitOnError)
 	days := fs.Int("days", 7, "how many days back")
 	_ = fs.Parse(args)
-	b, err := os.ReadFile(filepath.Join(core.Home(), ".local/share/jevcli/calls.jsonl"))
+	b, err := os.ReadFile(filepath.Join(core.Home(), ".local/share/jevx/calls.jsonl"))
 	if err != nil {
 		die("no ledger yet (%v)", err)
 	}

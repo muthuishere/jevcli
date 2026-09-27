@@ -17,8 +17,8 @@ func TestSection(t *testing.T) {
 	if got, ok := Section("## Jev\n## Build\nx", "Jev"); !ok || got != "" {
 		t.Fatalf("an empty section ends at the next heading: ok=%v %q", ok, got)
 	}
-	if _, ok := Section("#!/bin/sh\n#jevcli\nx", "Jev"); ok {
-		t.Fatal("#! and #jevcli are not the section")
+	if _, ok := Section("#!/bin/sh\n#jevx\nx", "Jev"); ok {
+		t.Fatal("#! and #jevx are not the section")
 	}
 	if got, _ := Section("### Decision model\nx\n## y", "decision model"); got != "x" {
 		t.Fatalf("custom name, any level, any case: %q", got)
