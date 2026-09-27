@@ -21,7 +21,7 @@ Site: https://muthuishere.github.io/jevx/
 
 ## Install
 ```bash
-npm i -g jevx                                                                                     # any OS with Node 18+
+npm i -g @muthuishere/jevx                                                                                     # any OS with Node 18+
 curl -fsSL https://muthuishere.github.io/jevx/install.sh | sh                                   # macOS / Linux
 curl -fsSLo install.cmd https://muthuishere.github.io/jevx/install.cmd && install.cmd          # Windows
 ```

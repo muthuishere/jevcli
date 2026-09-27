@@ -4,7 +4,7 @@
 The command, skill, config (`~/.config/jevx`), data (`~/.local/share/jevx`), folder dir (`.jevx/`), env vars (`JEVX_*`)
 and release assets (`jevx_<os>_<arch>`) are jevx; the repo, Go module and site URL stay jevcli. Back-compat: the old
 config/data dirs are moved on first run, `.jevcli/` and `JEVCLI_*` are still read, old skill dirs and old hook entries are
-replaced on install. Code: `cmd/jevx/`. npm package `jevx` (`npm/`): postinstall downloads the release binary for the
+replaced on install. Code: `cmd/jevx/`. npm package `@muthuishere/jevx` (`npm/`): postinstall downloads the release binary for the
 platform (counted by GitHub Releases), then runs `jevx install`; published by the `npm` job in release.yml when the repo
 has an `NPM_TOKEN` secret.
 
