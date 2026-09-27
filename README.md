@@ -29,7 +29,7 @@ number or a key, never prose. The agent keeps its reasoning for the real work.
 5. **Any endpoint, nothing hidden.** Any System One URL works (keys stay in environment variables, expanded only when a
    request is sent). Replies are validated, 429/5xx are retried, and every call is logged without its content.
 
-## Why jevx
+## Jev, agent ready
 
 Jev is great at small, typed decisions in well under a second. If you are building your own agent or service, call
 its API from your code: that is the right tool, and you do not need jevx.
