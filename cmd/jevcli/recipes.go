@@ -324,8 +324,9 @@ func recipe(cmd string, args []string) {
 	case "feels":
 		// A shell if statement: `if jevcli feels urgent < email.txt; then ...`. Exit 0 = yes, 1 = no, 2 = error.
 		fs := flag.NewFlagSet(cmd, flag.ExitOnError)
-		in, prof, th := fs.String("in", "-", "the input: TEXT, @file or - (stdin)"), profileFlag(fs), fs.Float64("threshold", 0.5, "P(yes) needed to exit 0")
+		in, prof, th := fs.String("in", "-", "the input: TEXT, @file or - (stdin)"), profileFlag(fs), fs.Float64("yes", 0.8, "P(yes) at or above this exits 0")
 		quiet := fs.Bool("q", false, "print nothing, only the exit code")
+		no := fs.Float64("no", 0.2, "P(yes) at or below this exits 1; in between exits 3 (unsure)")
 		adj, rest := firstPositional(args)
 		_ = fs.Parse(rest)
 		if adj == "" {
@@ -340,14 +341,19 @@ func recipe(cmd string, args []string) {
 		if !*quiet {
 			pr("%.2f", a.P())
 		}
-		if a.P() < *th {
+		switch {
+		case a.P() >= *th:
+		case a.P() <= *no:
 			os.Exit(1)
+		default:
+			os.Exit(3)
 		}
 
 	case "match":
 		// A switch: `case $(jevcli match billing="about money" bug="a defect report" < msg) in billing) ...`.
 		fs := flag.NewFlagSet(cmd, flag.ExitOnError)
 		in, prof, instr := fs.String("in", "-", "the input: TEXT, @file or - (stdin)"), profileFlag(fs), fs.String("question", "Which description fits best?", "the question")
+		minC := fs.Float64("min", 0.6, "confidence below this exits 3 (unsure); the key is still printed")
 		var arms []string
 		for len(args) > 0 && !strings.HasPrefix(args[0], "-") {
 			arms, args = append(arms, args[0]), args[1:]
@@ -367,8 +373,11 @@ func recipe(cmd string, args []string) {
 		}
 		name, p := resolve(*prof)
 		a := ask(name, p, text(*in), map[string]any{"q": map[string]any{"type": "choice", "instructions": *instr, "criteria": crit}})["q"]
-		fmt.Fprintf(os.Stderr, "match: %s (confidence %.2f, %s)\n", a.Choice, conf(a), name)
+		fmt.Fprintf(os.Stderr, "which: %s (confidence %.2f, %s)\n", a.Choice, conf(a), name)
 		pr("%s", a.Choice)
+		if conf(a) < *minC {
+			os.Exit(3)
+		}
 
 	case "pick-func":
 		fs := flag.NewFlagSet(cmd, flag.ExitOnError)

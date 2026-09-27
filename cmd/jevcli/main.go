@@ -36,7 +36,8 @@ var version = "dev"
 //go:embed skill
 var skillFS embed.FS
 
-func die(f string, a ...any) { fmt.Fprintf(os.Stderr, "jevcli: "+f+"\n", a...); os.Exit(1) }
+// die exits 4: an error is never a "no" (1) or "unsure" (3), so `if jevcli is ...` cannot mistake an outage for an answer.
+func die(f string, a ...any) { fmt.Fprintf(os.Stderr, "jevcli: "+f+"\n", a...); os.Exit(4) }
 
 type multi []string
 
@@ -616,6 +617,8 @@ func main() {
 		cmdHook(a)
 	case "config":
 		cmdConfig(a)
+	case "stats":
+		cmdStats(a)
 	case "version", "--version", "-v":
 		pr("jevcli %s", version)
 	case "skill", "cookbook":
@@ -916,4 +919,49 @@ func hasAny(args []string, flags ...string) bool {
 		}
 	}
 	return false
+}
+
+// cmdStats summarises the call ledger: calls, errors, tokens and latency per day and host.
+func cmdStats(args []string) {
+	fs := flag.NewFlagSet("stats", flag.ExitOnError)
+	days := fs.Int("days", 7, "how many days back")
+	_ = fs.Parse(args)
+	b, err := os.ReadFile(filepath.Join(core.Home(), ".local/share/jevcli/calls.jsonl"))
+	if err != nil {
+		die("no ledger yet (%v)", err)
+	}
+	type agg struct {
+		calls, errs, in, out int
+		ms                   []int
+	}
+	from := time.Now().UTC().AddDate(0, 0, -*days).Format("2006-01-02")
+	m := map[string]*agg{}
+	for _, l := range strings.Split(string(b), "\n") {
+		var r struct {
+			TS, Host, Error string
+			MS              int
+			Usage           map[string]float64
+		}
+		if json.Unmarshal([]byte(l), &r) != nil || len(r.TS) < 10 || r.TS[:10] < from {
+			continue
+		}
+		k := r.TS[:10] + "  " + r.Host
+		if m[k] == nil {
+			m[k] = &agg{}
+		}
+		a := m[k]
+		a.calls++
+		a.ms = append(a.ms, r.MS)
+		a.in += int(r.Usage["input_tokens"])
+		a.out += int(r.Usage["output_tokens"])
+		if r.Error != "" {
+			a.errs++
+		}
+	}
+	pr("%-40s %6s %6s %10s %8s %8s", "day  host", "calls", "errors", "tokens in", "out", "p50 ms")
+	for _, k := range keys(m) {
+		a := m[k]
+		sort.Ints(a.ms)
+		pr("%-40s %6d %6d %10d %8d %8d", k, a.calls, a.errs, a.in, a.out, a.ms[len(a.ms)/2])
+	}
 }

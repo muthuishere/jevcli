@@ -14,13 +14,15 @@ It only judges. You still write the code, the reply or the fix.
 ## The three calls
 
 ```bash
-jevcli is "Is this urgent?" < email.txt            # prints P(yes) e.g. 0.98; exit 0 if >= 0.5, else 1
+jevcli is "Is this urgent?" < email.txt            # prints P(yes) e.g. 0.98; exit 0 yes, 1 no, 3 unsure, 4 error
 jevcli which bug="a software defect" billing="about money" other="anything else" < msg.txt   # prints the key
 jevcli ask --lines app.log --is error="Is this line an error?" --parallel 8                  # JSONL, one per line
 ```
 
 - The input is **stdin**, or `--in @file`, or `--in "text"`.
-- `is` exits 0/1, so it works as an `if`. `which` prints one key, so it works in a `case`.
+- **Exit codes are the contract:** 0 = yes (P ≥ 0.8), 1 = no (P ≤ 0.2), **3 = unsure** (in between), **4 = error**
+  (network, auth, invalid reply). An error is never a "no": on 4, say the call failed; on 3, check it yourself.
+  `--yes` / `--no` move the band. `which` prints one key and exits 3 when confidence < 0.6 (`--min`).
 - `ask` takes many questions over many inputs. `--lines FILE` makes one input per line, `--states FILE.jsonl` one per JSON
   line, and `--in` gives a single input. Questions come from `--is NAME="Q"`, `--which NAME="Q|key=desc;key=desc"`,
   `--score NAME="Q|low;mid;high"` or `--questions set.json`. The output is one JSON line per input, in input order:
@@ -42,8 +44,8 @@ jevcli ask --lines app.log --is error="Is this line an error?" --parallel 8     
 whose decision it is and what counts as yes: "Would a senior on-call engineer page someone for this line?" works better
 than "bad?".
 
-**Trust rule.** Act on `is` when P ≥ 0.8 or ≤ 0.2, and on `which` when confidence ≥ 0.6 (printed on stderr). In between,
-treat the answer as a lean and check it yourself, or ask the user. When an answer changed what you did, say so in your
+**Trust rule.** The exit codes already apply it. For `ask` output, act on `noul` ≥ 0.8 or ≤ 0.2 and on a choice with
+`confidence` ≥ 0.6. In between, treat the answer as a lean and check it yourself, or ask the user. When an answer changed what you did, say so in your
 report: "jevcli flagged 12 of 300 lines (P > 0.8)".
 
 ## Judge your own turn before handing back
@@ -62,6 +64,10 @@ jevcli profile add jev https://your-endpoint/v1/systemone --model MODEL --header
 ```
 If a call fails with "no url" or "needs $VAR", tell the user which profile or variable is missing. Do not guess one.
 `--profile NAME` picks a different endpoint for one call.
+
+## Cost and reliability
+Replies are validated (fail closed), 429 / 5xx are retried, and every call is logged without content to
+`~/.local/share/jevcli/calls.jsonl`. `jevcli stats` shows calls, errors, tokens and p50 latency per day.
 
 ## Never
 - Use it as a safety gate. Permissions, money, legal and irreversible calls stay with the user.

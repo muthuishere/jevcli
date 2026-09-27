@@ -46,6 +46,16 @@ same (0.93 same), extract --kind date (due date, confidence 1.00), pick-func (re
 two failure lines), verify, rank, tree, score, route (act/confirm/escalate, exit 0/10/20), samples (agreement), run.
 A small personal model answered several of these wrongly: the recipes are only as good as the model behind the profile.
 
+## Reliability (v0.3.0, 2026-09-27), from the ecosystem scan
+- Exit codes: 0 yes, 1 no, 3 unsure (`is` band 0.2/0.8, `which --min 0.6`), 4 any error. `die` exits 4, never 1.
+- `core.AskRaw`: retries 429/5xx/network (3 tries, backoff), fail-closed validation (exact question ids, probs in
+  [0,1] summing to 1, choice in offered keys), ledger `~/.local/share/jevcli/calls.jsonl` (no content), `jevcli stats`.
+- Stop hook local pre-gate: judge only turns that edited files with no test/build/check after (`gate: "all"` = every
+  turn). LastTurn keeps the LAST 25 actions. Tests: `go test ./...` (validation, retries, gate) with a fake server.
+- Ecosystem notes (2026-09-27 scan): the leaders are jkudish/jev-mcp, Nasrallah-AL/jev-cli, shaharia-lab/jev-cli,
+  valentynkit/jev-belay, tamaratran/fast-jev-compaction. Negative evidence: Jev second-guessing a strong model lost
+  accuracy (statsguysam, 194 -> 173 / 200), so `judge` claims need our own eval first.
+
 ## Skill-first surface (v0.2.0, 2026-09-27)
 The skill is the product and the site sells the skill. The CLI teaches three verbs: `is` (P, exit 0/1), `which` (a key)
 and `ask` (JSONL over `--in` / `--lines` / `--states`, with `--is` / `--which` / `--score`), plus `judge`. The older names
@@ -65,7 +75,8 @@ path with a space; reinstall idempotent, uninstall clean).
 
 ## Next
 - `query --json-in`: accept a full System One request body and stream answers as JSONL.
-- Tests: table tests for `State` trimming, `Redact`, `$VAR` expansion / `MissingEnv`, the transcript parser, settings.json
+- Next up: `jevcli eval` (replay transcripts / labelled JSONL -> pick thresholds), frozen-answer offline tests, `ask --resume` + cache, redaction before send, PreToolUse guard template, fallback profiles.
+- Tests (more): table tests for `State` trimming, `Redact`, `$VAR` expansion / `MissingEnv`, the transcript parser, settings.json
   install/uninstall (backup + only our entry), and a fake System One server for every command.
 - Hooks beyond Stop (PreToolUse guardrail via a noul, UserPromptSubmit routing), each a template, all disabled by default.
 - Codex hooks (only the skill is installed for Codex today).

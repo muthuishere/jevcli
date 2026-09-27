@@ -6,12 +6,15 @@ package core
 import (
 	"bufio"
 	"bytes"
+	"crypto/sha256"
 	_ "embed"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -102,6 +105,7 @@ type HookCfg struct {
 	Enabled bool   `json:"enabled"`
 	Mode    string `json:"mode"`    // shadow (log only) | block (send the agent back)
 	Profile string `json:"profile"` // which endpoint judges the turn
+	Gate    string `json:"gate,omitempty"` // "" = judge only turns that edited files with no check after; "all" = every turn
 }
 
 type Config struct {
@@ -265,12 +269,47 @@ func Ask(p Profile, state string, qs map[string]any, timeout time.Duration) (map
 }
 
 // AskRaw is Ask without the shared LastRaw: it returns the response body too, so concurrent callers stay race-free.
+// It retries 429 / 5xx / network errors with backoff, rejects a reply that does not answer exactly the questions asked
+// or carries out-of-range probabilities (fail closed), and appends one line per call to the ledger.
 func AskRaw(p Profile, state string, qs map[string]any, timeout time.Duration) (map[string]Answer, []byte, error) {
 	if MissingEnv(p.Norm()) != "" {
 		return nil, nil, ErrNeedKey
 	}
 	p = p.Expanded()
 	body, _ := json.Marshal(map[string]any{"model": p.Model, "state": state, "questions": qs})
+	t0 := time.Now()
+	var raw []byte
+	var err error
+	for try := 0; try < 3; try++ {
+		if try > 0 {
+			time.Sleep(time.Duration(try*try) * 500 * time.Millisecond)
+		}
+		var retry bool
+		raw, retry, err = post(p, body, timeout)
+		if err == nil || !retry {
+			break
+		}
+	}
+	var out struct {
+		Model   string            `json:"model"`
+		Answers map[string]Answer `json:"answers"`
+		Usage   map[string]any    `json:"usage"`
+	}
+	if err == nil {
+		if e := json.Unmarshal(raw, &out); e != nil {
+			err = fmt.Errorf("unreadable answer: %v", e)
+		} else {
+			err = validate(qs, out.Answers)
+		}
+	}
+	ledger(p, qs, out.Model, out.Usage, time.Since(t0), err)
+	if err != nil {
+		return nil, nil, err
+	}
+	return out.Answers, raw, nil
+}
+
+func post(p Profile, body []byte, timeout time.Duration) ([]byte, bool, error) {
 	req, _ := http.NewRequest("POST", p.URL, bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	for k, v := range p.Headers {
@@ -278,20 +317,85 @@ func AskRaw(p Profile, state string, qs map[string]any, timeout time.Duration) (
 	}
 	resp, err := (&http.Client{Timeout: timeout}).Do(req)
 	if err != nil {
-		return nil, nil, err
+		return nil, true, err
 	}
 	defer resp.Body.Close()
 	raw, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode/100 != 2 {
-		return nil, nil, fmt.Errorf("%s: HTTP %d: %s", p.URL, resp.StatusCode, strings.TrimSpace(string(raw))[:min(300, len(strings.TrimSpace(string(raw))))])
+		t := strings.TrimSpace(string(raw))
+		return nil, resp.StatusCode == 429 || resp.StatusCode >= 500, fmt.Errorf("%s: HTTP %d: %s", p.URL, resp.StatusCode, t[:min(300, len(t))])
 	}
-	var out struct {
-		Answers map[string]Answer `json:"answers"`
+	return raw, false, nil
+}
+
+// validate fails closed: every question answered and nothing extra, probabilities in [0,1] summing to ~1, a choice
+// that is one of the offered keys.
+func validate(qs map[string]any, ans map[string]Answer) error {
+	if len(ans) != len(qs) {
+		return fmt.Errorf("invalid answer: %d answers for %d questions", len(ans), len(qs))
 	}
-	if err := json.Unmarshal(raw, &out); err != nil {
-		return nil, nil, fmt.Errorf("unreadable answer: %v", err)
+	for k, q := range qs {
+		a, ok := ans[k]
+		if !ok {
+			return fmt.Errorf("invalid answer: no answer for %q", k)
+		}
+		if pr := a.P(); a.Type == "noul" && (pr < 0 || pr > 1) {
+			return fmt.Errorf("invalid answer: %q probability %v", k, pr)
+		}
+		if len(a.Probabilities) > 0 {
+			sum := 0.0
+			for _, v := range a.Probabilities {
+				if v < 0 || v > 1 {
+					return fmt.Errorf("invalid answer: %q probability %v", k, v)
+				}
+				sum += v
+			}
+			if sum < 0.98 || sum > 1.02 {
+				return fmt.Errorf("invalid answer: %q probabilities sum to %.3f", k, sum)
+			}
+		}
+		if a.Type == "choice" {
+			if crit, _ := q.(map[string]any)["criteria"].(map[string]string); crit != nil {
+				if _, ok := crit[a.Choice]; !ok {
+					return fmt.Errorf("invalid answer: %q chose %q, not an offered key", k, a.Choice)
+				}
+			}
+		}
 	}
-	return out.Answers, raw, nil
+	return nil
+}
+
+// ledger appends one JSON line per call to ~/.local/share/jevcli/calls.jsonl: host, model, question count and hash,
+// tokens, latency, error. Never the state, the question text or a header. JEVCLI_LEDGER=off disables it.
+func ledger(p Profile, qs map[string]any, model string, usage map[string]any, d time.Duration, err error) {
+	if os.Getenv("JEVCLI_LEDGER") == "off" {
+		return
+	}
+	host := p.URL
+	if u, e := url.Parse(p.URL); e == nil {
+		host = u.Host
+	}
+	qb, _ := json.Marshal(qs)
+	h := sha256.Sum256(qb)
+	row := map[string]any{"ts": time.Now().UTC().Format(time.RFC3339), "host": host, "model": model, "questions": len(qs),
+		"qhash": hex.EncodeToString(h[:6]), "ms": d.Milliseconds(), "usage": usage}
+	if err != nil {
+		row["error"] = trimErr(err.Error())
+	}
+	b, _ := json.Marshal(row)
+	path := filepath.Join(Home(), ".local/share/jevcli/calls.jsonl")
+	_ = os.MkdirAll(filepath.Dir(path), 0o755)
+	if f, e := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600); e == nil {
+		_, _ = f.Write(append(b, '\n'))
+		_ = f.Close()
+	}
+}
+
+func trimErr(s string) string {
+	if i := strings.Index(s, ": HTTP "); i >= 0 {
+		s = s[i+2:]
+	}
+	return s[:min(120, len(s))]
 }
 
 // LastRaw is the full body of the last successful response (model, answers, usage, id), for commands that print it as is.
@@ -432,6 +536,33 @@ func actionOf(name string, in map[string]any) string {
 
 // LastTurn reads a Claude Code transcript (JSONL) and returns the last genuine human request with everything the agent
 // said and did after it. Only the tail of a long transcript is read.
+// skipTurn is the local pre-gate for the Stop hook: a turn that changed no files, or ran a test / build / check after
+// its last edit, is not worth a call. It returns the reason to skip, or "" to judge the turn.
+func skipTurn(acts []string) string {
+	last := -1
+	for i, a := range acts {
+		for _, t := range []string{"Edit", "Write", "MultiEdit", "NotebookEdit"} {
+			if strings.HasPrefix(a, t+" ") || strings.HasPrefix(a, t+":") {
+				last = i
+			}
+		}
+	}
+	if last < 0 {
+		return "no file changes"
+	}
+	for _, a := range acts[last+1:] {
+		if strings.HasPrefix(a, "Bash") {
+			l := strings.ToLower(a)
+			for _, w := range []string{"test", "build", "vet", "lint", "check", "pytest", "tsc", "cargo", "make"} {
+				if strings.Contains(l, w) {
+					return "checked after the last edit"
+				}
+			}
+		}
+	}
+	return ""
+}
+
 func LastTurn(path string) (req, text string, actions []string, ok bool) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -503,8 +634,8 @@ func LastTurn(path string) (req, text string, actions []string, ok bool) {
 	if req == "" || (text == "" && len(actions) == 0) {
 		return
 	}
-	if len(actions) > 25 {
-		actions = actions[:25]
+	if len(actions) > 25 { // keep the end of the turn: the last edits and checks matter most
+		actions = actions[len(actions)-25:]
 	}
 	return cut(req, 2500), cut(text, 3000), actions, true
 }
@@ -533,6 +664,12 @@ func Verdict(cfg Config, h HookCfg, in HookInput) (logRec map[string]any, blockR
 	req, text, acts, ok := LastTurn(in.TranscriptPath)
 	if !ok {
 		return nil, ""
+	}
+	if h.Gate != "all" {
+		if why := skipTurn(acts); why != "" { // decided locally, no call spent
+			rec["skipped"] = why
+			return rec, ""
+		}
 	}
 	st := State(req, text, acts)
 	t0 := time.Now()
@@ -599,7 +736,9 @@ func Detach(args []string, stdinFile string) error {
 const HookMarker = " hook run "
 
 // isOurHook matches our hook command on every OS: `/x/jevcli hook run stop`, `"C:\x\jevcli.exe" hook run stop`.
-func isOurHook(c string) bool { return strings.Contains(c, "jevcli") && strings.Contains(c, HookMarker) }
+func isOurHook(c string) bool {
+	return strings.Contains(c, "jevcli") && strings.Contains(c, HookMarker)
+}
 
 // SettingsPath is the REAL Claude Code user settings file (~/.claude/settings.json may be a symlink).
 func SettingsPath() string {
