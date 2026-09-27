@@ -35,8 +35,8 @@ One input prints `NAME VERDICT P` per question (`--json`, `--raw`) and exits 0 y
 batch prints JSONL in input order (20 tickets: 8.2 s sequentially, 1.5 s at 8 parallel).
 
 ## Context
-Folder: `jevcli context set|add TEXT --local` and `jevcli question add NAME ... --local` write `./.jevcli/` (found from any
-subfolder, like `.git`; commit it with the repo). Global / profile: `jevcli context set TEXT|@file [--profile P]` (global or per profile; a file is re-read at call time), `jevcli context
+Folder: `jevcli context set|add TEXT --local` and `jevcli question add NAME ... --local` write `./jev.md` (context, found from any subfolder like CLAUDE.md; name set by `local_context_file`) and
+`./.jevcli/questions.json`; commit them with the repo. Global / profile: `jevcli context set TEXT|@file [--profile P]` (global or per profile; a file is re-read at call time), `jevcli context
 clear`, `jevcli context` (show). Per saved question: `question add NAME ... --context TEXT`. Per call: `ask|judge --context
 TEXT|@file` (repeatable). Order sent: global, folder, profile, call; a question's context goes ahead of its instructions. A JSON
 input keeps its shape: the context is merged into its `"context"` field.

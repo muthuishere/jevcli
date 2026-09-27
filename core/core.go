@@ -200,7 +200,8 @@ type Config struct {
 	Profiles    map[string]Profile  `json:"profiles"`
 	Hooks       map[string]HookCfg  `json:"hooks"`
 	Defaults    Settings            `json:"defaults,omitempty"`
-	Questions   map[string]Question `json:"questions,omitempty"` // named questions: jevcli ask NAME
+	Questions   map[string]Question `json:"questions,omitempty"`          // named questions: jevcli ask NAME
+	LocalFile   string              `json:"local_context_file,omitempty"` // folder context file name (default jev.md)
 }
 
 func Home() string { h, _ := os.UserHomeDir(); return h }
@@ -277,7 +278,7 @@ func keys[V any](m map[string]V) []string {
 // WithContext prepends the configured standing context (global, then the profile's) to a state. Context is the user's
 // own data in their config: jevcli ships none.
 // LocalDir is the nearest .jevcli folder from the working directory up (like .git), or "" when there is none.
-// It holds folder-level context.md and questions.json that apply to every call made inside that folder.
+// It holds folder-level questions.json that apply to every call made inside that folder.
 func LocalDir() string {
 	d, err := os.Getwd()
 	if err != nil {
@@ -286,6 +287,34 @@ func LocalDir() string {
 	for {
 		if st, err := os.Stat(filepath.Join(d, ".jevcli")); err == nil && st.IsDir() && filepath.Join(d, ".jevcli") != filepath.Join(Home(), ".jevcli") {
 			return filepath.Join(d, ".jevcli")
+		}
+		up := filepath.Dir(d)
+		if up == d {
+			return ""
+		}
+		d = up
+	}
+}
+
+// LocalContextName is the folder context file name: config local_context_file, else jev.md.
+func (c Config) LocalContextName() string {
+	if c.LocalFile != "" {
+		return c.LocalFile
+	}
+	return "jev.md"
+}
+
+// LocalContextFile is the nearest folder context file (jev.md by default) from the working directory up, or "".
+// Like CLAUDE.md, it sits in the folder itself and applies to every call made there or below.
+func (c Config) LocalContextFile() string {
+	d, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+	for {
+		f := filepath.Join(d, c.LocalContextName())
+		if st, err := os.Stat(f); err == nil && !st.IsDir() && d != Home() {
+			return f
 		}
 		up := filepath.Dir(d)
 		if up == d {
@@ -310,10 +339,7 @@ func (c Config) WithContext(p Profile, state string, extra ...string) string {
 	p = p.Expanded()
 	c.Context, c.ContextFile = os.ExpandEnv(c.Context), os.ExpandEnv(c.ContextFile)
 	var parts []string
-	local := ""
-	if d := LocalDir(); d != "" {
-		local = filepath.Join(d, "context.md")
-	}
+	local := c.LocalContextFile()
 	for _, pair := range [][2]string{{c.Context, c.ContextFile}, {"", local}, {p.Context, p.ContextFile}} {
 		if pair[0] != "" {
 			parts = append(parts, strings.TrimSpace(pair[0]))

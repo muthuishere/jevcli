@@ -47,7 +47,7 @@ two failure lines), verify, rank, tree, score, route (act/confirm/escalate, exit
 A small personal model answered several of these wrongly: the recipes are only as good as the model behind the profile.
 
 ## Folder context + shortcuts (v0.6.0, 2026-09-27)
-- `.jevcli/` (nearest from cwd up, like .git): `context.md` + `questions.json`; `--local` on `context set|add|clear` and
+- `.jevcli/` (nearest from cwd up, like .git): `questions.json`; folder context is `./jev.md` (nearest up, config `local_context_file`); `--local` on `context set|add|clear` and
   `question add|remove`. Order: global, folder, profile, question, call.
 - Shortcut verbs, all one question through cmdAsk (`cmdVerb` in ask.go): `is`, `pick`, `filter` (-v), `rank` (--top).
   Checked live in a nested folder: folder question crit -> yes 0.96; filter returned exactly the 2 failure lines.

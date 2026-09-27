@@ -60,7 +60,7 @@ jevcli context set "We are a 5-person SaaS; on-call is one engineer."        # g
 jevcli context set @~/notes/team.md --profile jev                            # one profile (a file is re-read each call)
 jevcli question add urgent --noul "Is this urgent?" --context "The reader is the CFO."   # one saved question
 jevcli ask urgent --context "The board meeting starts in 20 minutes." < msg.txt           # this call (TEXT or @file, repeatable)
-jevcli context set --local "This repo is a payments service."                # this folder (.jevcli/context.md)
+jevcli context set --local "This repo is a payments service."                # this folder: ./jev.md (like CLAUDE.md)
 jevcli context                                                                # show what is set, and where
 ```
 The same message scored 0.84 with no context, 0.94 with "the meeting is in 20 minutes" and 0.64 (unsure) with "the

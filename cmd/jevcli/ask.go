@@ -723,9 +723,9 @@ func cmdContext(args []string) {
 			}
 		}
 		show("global", cfg.Context, cfg.ContextFile)
-		if d := core.LocalDir(); d != "" {
-			if b, err := os.ReadFile(filepath.Join(d, "context.md")); err == nil {
-				show("folder", strings.TrimSpace(string(b)), filepath.Join(d, "context.md"))
+		if f := cfg.LocalContextFile(); f != "" {
+			if b, err := os.ReadFile(f); err == nil {
+				show("folder", strings.TrimSpace(string(b)), f)
 			}
 		}
 		for _, k := range keys(cfg.Profiles) {
@@ -770,7 +770,7 @@ func cmdContext(args []string) {
 	pr("saved %s", core.ConfigPath())
 }
 
-// localContext edits the folder context: .jevcli/context.md in the nearest .jevcli folder (or ./.jevcli).
+// localContext edits the folder context: the nearest jev.md (config local_context_file), else ./jev.md.
 //
 //	jevcli context set TEXT|@file --local    replace it (a file's content is copied in)
 //	jevcli context add TEXT --local          append a line
@@ -780,7 +780,12 @@ func localContext(args []string) {
 		cmdContext(nil)
 		return
 	}
-	path := filepath.Join(localDir(), "context.md")
+	cfg := core.LoadConfig()
+	path := cfg.LocalContextFile()
+	if path == "" {
+		wd, _ := os.Getwd()
+		path = filepath.Join(wd, cfg.LocalContextName())
+	}
 	switch args[0] {
 	case "set", "add":
 		if len(args) < 2 {
