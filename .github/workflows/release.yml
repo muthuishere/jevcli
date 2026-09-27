@@ -29,17 +29,18 @@ jobs:
   npm:
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # npm trusted publishing (OIDC): no token stored anywhere
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           registry-url: https://registry.npmjs.org
+      - run: npm install -g npm@latest # trusted publishing needs npm 11.5.1+
       - name: publish jevx
-        if: ${{ env.NODE_AUTH_TOKEN != '' }}
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         working-directory: npm
         run: |
           npm version "${GITHUB_REF_NAME#v}" --no-git-tag-version
-          npm publish --access public
+          npm publish --provenance --access public
