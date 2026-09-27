@@ -62,7 +62,11 @@ curl -fsSL https://muthuishere.github.io/jevcli/install.sh | sh</pre>
   <div class="card"><b>Save them once</b><p><code>jevcli question add urgent …</code>, then <code>jevcli ask urgent,team</code> from any agent, any repo.</p></div>
   <div class="card"><b>Every knob is yours</b><p>Thresholds, parallelism, retries and timeouts come from config with sensible defaults, and can be set per profile or per question.</p></div>
 </div>
-<pre>jevcli question add urgent --noul "Is this urgent for the person receiving it?" --yes 0.85
+<pre><span class="k">if</span> jevcli is "Is this urgent?" &lt; email.txt; <span class="k">then</span> ...; <span class="k">fi</span>   <span class="o"># yes 0.95</span>
+jevcli filter "Is this an error?" &lt; app.log           <span class="o"># grep by meaning</span>
+jevcli rank "Is this about refunds?" --top 5 &lt; results.txt
+
+jevcli question add urgent --noul "Is this urgent for the person receiving it?" --yes 0.85
 jevcli question add team --choice "Which team?|web=frontend;api=backend;billing=money"
 
 echo "Checkout is down, customers are being charged twice" | jevcli ask urgent,team

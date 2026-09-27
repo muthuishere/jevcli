@@ -458,13 +458,15 @@ func cmdConfig(args []string) {
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: jevcli ask|question|context|defaults|judge|profile|stats|install|uninstall|hook|skill|version")
+		fmt.Fprintln(os.Stderr, "usage: jevcli ask|is|pick|filter|rank|question|context|defaults|judge|profile|stats|install|uninstall|hook|skill|version")
 		os.Exit(2)
 	}
 	a := os.Args[2:]
 	switch os.Args[1] {
 	case "ask", "a":
 		cmdAsk(a)
+	case "is", "pick", "filter", "rank":
+		cmdVerb(os.Args[1], a)
 	case "question", "questions", "q":
 		cmdQuestion(a)
 	case "defaults", "settings":

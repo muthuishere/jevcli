@@ -11,7 +11,19 @@ whether each of 300 log lines is an error, which team owns a ticket, whether two
 
 It only judges. You still write the code, the reply or the fix.
 
-## One command: `jevcli ask`
+## Shortcuts for the everyday cases
+
+```bash
+if jevcli is "Is this urgent?" < email.txt; then ...; fi      # yes 0.95 · exit 0 yes, 1 no, 3 unsure, 4 error
+jevcli pick "Which team?" web=frontend api=backend billing=money --in "charged twice"   # billing 0.97
+jevcli filter "Is this an error or failure?" < app.log         # grep by meaning: prints the matching lines (-v: the rest)
+jevcli rank "Is this about refunds?" --top 5 < results.txt     # every line with P(yes), best first
+```
+Each is one question through `ask`, with the same saved questions (`jevcli is urgent`), context, settings and exit codes.
+Other checks are just a well-worded `is` or `pick`: `is "Does the source support this claim: …?"`,
+`is "Are A and B the same customer?"`, `pick "Which function handles this?" refund=… invoice=…`.
+
+## The full command: `jevcli ask`
 
 ```bash
 jevcli ask --noul urgent="Is this urgent for the person receiving it?" < email.txt
@@ -41,13 +53,14 @@ jevcli ask --states tickets.jsonl team,sev --parallel 8                # batch o
 
 ## Context: what the model should know
 
-The model sees only the question and the input, so give it the background. The layers are sent in order:
+The model sees only the question and the input, so give it the background. The layers are sent in this order: global, folder, profile, question, call.
 
 ```bash
 jevcli context set "We are a 5-person SaaS; on-call is one engineer."        # global, every call
 jevcli context set @~/notes/team.md --profile jev                            # one profile (a file is re-read each call)
 jevcli question add urgent --noul "Is this urgent?" --context "The reader is the CFO."   # one saved question
 jevcli ask urgent --context "The board meeting starts in 20 minutes." < msg.txt           # this call (TEXT or @file, repeatable)
+jevcli context set --local "This repo is a payments service."                # this folder (.jevcli/context.md)
 jevcli context                                                                # show what is set, and where
 ```
 The same message scored 0.84 with no context, 0.94 with "the meeting is in 20 minutes" and 0.64 (unsure) with "the
@@ -62,7 +75,9 @@ jevcli question add team --choice "Which team should handle this?|web=frontend o
 jevcli question add sev --score "How severe is this?|low;medium;high"
 jevcli question list
 ```
-Check `jevcli question list` before writing a question inline: the user may already have one tuned.
+Add `--local` to save a question in this folder's `.jevcli/questions.json` instead. It applies to every call made inside
+the folder, wins over a global question of the same name, and can be committed with the repo. Check `jevcli question
+list` before writing a question inline: the user may already have one tuned.
 
 ## Everything is configurable, with defaults
 

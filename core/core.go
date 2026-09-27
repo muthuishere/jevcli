@@ -276,11 +276,45 @@ func keys[V any](m map[string]V) []string {
 
 // WithContext prepends the configured standing context (global, then the profile's) to a state. Context is the user's
 // own data in their config: jevcli ships none.
+// LocalDir is the nearest .jevcli folder from the working directory up (like .git), or "" when there is none.
+// It holds folder-level context.md and questions.json that apply to every call made inside that folder.
+func LocalDir() string {
+	d, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+	for {
+		if st, err := os.Stat(filepath.Join(d, ".jevcli")); err == nil && st.IsDir() && filepath.Join(d, ".jevcli") != filepath.Join(Home(), ".jevcli") {
+			return filepath.Join(d, ".jevcli")
+		}
+		up := filepath.Dir(d)
+		if up == d {
+			return ""
+		}
+		d = up
+	}
+}
+
+// LocalQuestions are the named questions of the nearest .jevcli folder (they override global ones with the same name).
+func LocalQuestions() map[string]Question {
+	m := map[string]Question{}
+	if d := LocalDir(); d != "" {
+		if b, err := os.ReadFile(filepath.Join(d, "questions.json")); err == nil {
+			_ = json.Unmarshal(b, &m)
+		}
+	}
+	return m
+}
+
 func (c Config) WithContext(p Profile, state string, extra ...string) string {
 	p = p.Expanded()
 	c.Context, c.ContextFile = os.ExpandEnv(c.Context), os.ExpandEnv(c.ContextFile)
 	var parts []string
-	for _, pair := range [][2]string{{c.Context, c.ContextFile}, {p.Context, p.ContextFile}} {
+	local := ""
+	if d := LocalDir(); d != "" {
+		local = filepath.Join(d, "context.md")
+	}
+	for _, pair := range [][2]string{{c.Context, c.ContextFile}, {"", local}, {p.Context, p.ContextFile}} {
 		if pair[0] != "" {
 			parts = append(parts, strings.TrimSpace(pair[0]))
 		}

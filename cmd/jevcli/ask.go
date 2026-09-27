@@ -15,6 +15,8 @@ import (
 	"io"
 	"math"
 	"os"
+	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -223,6 +225,13 @@ func splitArgs(args []string, valued map[string]bool) (names, flags []string) {
 	return
 }
 
+// outMode is set by the shortcut verbs: "bare" (one question, print VERDICT P), "filter" / "filter-v" (print the
+// matching inputs), "rank" (print P and input, best first; topN limits it).
+var (
+	outMode string
+	topN    int
+)
+
 func cmdAsk(args []string) {
 	fs := flag.NewFlagSet("ask", flag.ExitOnError)
 	in := fs.String("in", "", "one input: text, a JSON object, @file or - (default: stdin)")
@@ -272,9 +281,10 @@ func cmdAsk(args []string) {
 
 	qs := map[string]core.Question{}
 	for _, n := range names {
-		q, ok := cfg.Questions[n]
+		all := allQuestions(cfg)
+		q, ok := all[n]
 		if !ok {
-			die("no question named %q (have: %s). Add one: jevcli question add %s --noul \"...\"", n, strings.Join(keys(cfg.Questions), ", "), n)
+			die("no question named %q (have: %s). Add one: jevcli question add %s --noul \"...\"", n, strings.Join(keys(all), ", "), n)
 		}
 		qs[n] = normQ(q)
 	}
@@ -352,6 +362,8 @@ func cmdAsk(args []string) {
 		}
 		if *asJSON {
 			rows[k] = map[string]any{"verdict": v, "answer": ans[k]}
+		} else if outMode == "bare" {
+			pr("%s %.2f", v, value(ans[k]))
 		} else {
 			pr("%-16s %-10s %.2f", k, v, value(ans[k]))
 		}
@@ -399,11 +411,42 @@ func batch(cfg core.Config, p core.Profile, qs map[string]core.Question, set cor
 	wg.Wait()
 	code := 0
 	for _, r := range rows {
-		b, _ := json.Marshal(r)
-		pr("%s", b)
 		if r.Error != "" {
 			code = 4
+			fmt.Fprintf(os.Stderr, "jevcli: line %d: %s\n", r.Line, r.Error)
 		}
+	}
+	if outMode == "filter" || outMode == "filter-v" || outMode == "rank" {
+		type hit struct {
+			p    float64
+			v, s string
+		}
+		var hits []hit
+		for i, r := range rows {
+			for _, a := range r.Answers { // the shortcut verbs ask exactly one question
+				m := a.(map[string]any)
+				hits = append(hits, hit{m["p"].(float64), m["verdict"].(string), inputs[i]})
+			}
+		}
+		if outMode == "rank" {
+			sort.SliceStable(hits, func(i, j int) bool { return hits[i].p > hits[j].p })
+			if topN > 0 && topN < len(hits) {
+				hits = hits[:topN]
+			}
+		}
+		for _, h := range hits {
+			switch {
+			case outMode == "rank":
+				pr("%.2f  %s", h.p, h.s)
+			case (h.v == "yes") == (outMode == "filter"):
+				pr("%s", h.s)
+			}
+		}
+		return code
+	}
+	for _, r := range rows {
+		b, _ := json.Marshal(r)
+		pr("%s", b)
 	}
 	return code
 }
@@ -421,25 +464,76 @@ func round2(v float64) float64 { return math.Round(v*100) / 100 }
 
 // ------------------------------------------------------------------ named questions + settings
 
+// allQuestions merges global questions with the nearest .jevcli folder's (the folder wins on a name clash).
+func allQuestions(cfg core.Config) map[string]core.Question {
+	m := map[string]core.Question{}
+	for k, q := range cfg.Questions {
+		m[k] = q
+	}
+	for k, q := range core.LocalQuestions() {
+		m[k] = q
+	}
+	return m
+}
+
+// takeLocal removes --local from args; with it, question / context commands write to ./.jevcli (created if missing).
+func takeLocal(args []string) ([]string, bool) {
+	var out []string
+	local := false
+	for _, a := range args {
+		if a == "--local" || a == "-local" {
+			local = true
+			continue
+		}
+		out = append(out, a)
+	}
+	return out, local
+}
+
+// localDir is the folder --local writes to: the nearest existing .jevcli, else ./.jevcli.
+func localDir() string {
+	if d := core.LocalDir(); d != "" {
+		return d
+	}
+	wd, _ := os.Getwd()
+	d := filepath.Join(wd, ".jevcli")
+	if err := os.MkdirAll(d, 0o755); err != nil {
+		die("%v", err)
+	}
+	return d
+}
+
 func cmdQuestion(args []string) {
+	args, local := takeLocal(args)
 	cfg := core.LoadConfig()
 	if len(args) == 0 || args[0] == "list" {
-		if len(cfg.Questions) == 0 {
-			pr("no named questions yet: jevcli question add NAME --noul \"QUESTION\"")
+		lq := core.LocalQuestions()
+		if len(cfg.Questions)+len(lq) == 0 {
+			pr("no named questions yet: jevcli question add NAME --noul \"QUESTION\" [--local]")
 			return
 		}
 		for _, k := range keys(cfg.Questions) {
-			q := cfg.Questions[k]
-			pr("%-16s %-7s %s", k, q.Type, q.Instructions)
+			if _, shadowed := lq[k]; !shadowed {
+				q := cfg.Questions[k]
+				pr("%-16s %-7s %-7s %s", k, q.Type, "global", q.Instructions)
+			}
+		}
+		for _, k := range keys(lq) {
+			q := lq[k]
+			pr("%-16s %-7s %-7s %s", k, q.Type, "folder", q.Instructions)
 		}
 		return
+	}
+	if local { // the folder's questions.json is edited instead of the global config
+		lq := core.LocalQuestions()
+		cfg.Questions = lq
 	}
 	switch args[0] {
 	case "show":
 		if len(args) < 2 {
 			die("usage: jevcli question show NAME")
 		}
-		q, ok := cfg.Questions[args[1]]
+		q, ok := allQuestions(cfg)[args[1]]
 		if !ok {
 			die("no question named %q", args[1])
 		}
@@ -488,7 +582,16 @@ func cmdQuestion(args []string) {
 		}
 		cfg.Questions[args[1]] = q
 	default:
-		die("usage: jevcli question list | show NAME | add NAME --noul|--choice|--score ... | remove NAME")
+		die("usage: jevcli question list | show NAME | add NAME --noul|--choice|--score ... | remove NAME   [--local]")
+	}
+	if local {
+		path := filepath.Join(localDir(), "questions.json")
+		b, _ := json.MarshalIndent(cfg.Questions, "", "  ")
+		if err := os.WriteFile(path, append(b, '\n'), 0o644); err != nil {
+			die("%v", err)
+		}
+		pr("saved %s", path)
+		return
 	}
 	if err := core.SaveConfig(cfg); err != nil {
 		die("%v", err)
@@ -582,6 +685,11 @@ func cmdDefaults(args []string) {
 //	jevcli context set TEXT|@file [--profile P] @file stores the path (read at call time, so edits apply)
 //	jevcli context clear [--profile P]
 func cmdContext(args []string) {
+	args, local := takeLocal(args)
+	if local {
+		localContext(args)
+		return
+	}
 	cfg := core.LoadConfig()
 	prof := ""
 	var rest []string
@@ -615,6 +723,11 @@ func cmdContext(args []string) {
 			}
 		}
 		show("global", cfg.Context, cfg.ContextFile)
+		if d := core.LocalDir(); d != "" {
+			if b, err := os.ReadFile(filepath.Join(d, "context.md")); err == nil {
+				show("folder", strings.TrimSpace(string(b)), filepath.Join(d, "context.md"))
+			}
+		}
 		for _, k := range keys(cfg.Profiles) {
 			if prof == "" || k == prof {
 				show("profile "+k, cfg.Profiles[k].Context, cfg.Profiles[k].ContextFile)
@@ -638,10 +751,15 @@ func cmdContext(args []string) {
 		} else {
 			*ctx, *file = v, ""
 		}
+	case "add":
+		if len(rest) < 2 {
+			die("usage: jevcli context add TEXT [--profile P]")
+		}
+		*ctx = strings.TrimSpace(strings.TrimSpace(*ctx) + "\n" + strings.Join(rest[1:], " "))
 	case "clear":
 		*ctx, *file = "", ""
 	default:
-		die("usage: jevcli context [show] | set TEXT|@file | clear  [--profile P]")
+		die("usage: jevcli context [show] | set TEXT|@file | add TEXT | clear  [--profile P | --local]")
 	}
 	if prof != "" {
 		cfg.Profiles[prof] = p
@@ -650,4 +768,113 @@ func cmdContext(args []string) {
 		die("%v", err)
 	}
 	pr("saved %s", core.ConfigPath())
+}
+
+// localContext edits the folder context: .jevcli/context.md in the nearest .jevcli folder (or ./.jevcli).
+//
+//	jevcli context set TEXT|@file --local    replace it (a file's content is copied in)
+//	jevcli context add TEXT --local          append a line
+//	jevcli context clear --local
+func localContext(args []string) {
+	if len(args) == 0 || args[0] == "show" {
+		cmdContext(nil)
+		return
+	}
+	path := filepath.Join(localDir(), "context.md")
+	switch args[0] {
+	case "set", "add":
+		if len(args) < 2 {
+			die("usage: jevcli context %s TEXT|@file --local", args[0])
+		}
+		v := strings.TrimSpace(text(strings.Join(args[1:], " ")))
+		if args[0] == "add" {
+			if old, err := os.ReadFile(path); err == nil && len(strings.TrimSpace(string(old))) > 0 {
+				v = strings.TrimSpace(string(old)) + "\n" + v
+			}
+		}
+		if err := os.WriteFile(path, []byte(v+"\n"), 0o644); err != nil {
+			die("%v", err)
+		}
+	case "clear":
+		_ = os.Remove(path)
+	default:
+		die("usage: jevcli context set TEXT|@file | add TEXT | clear  --local")
+	}
+	pr("saved %s", path)
+}
+
+// cmdVerb is the shortcut layer: each verb is one question through cmdAsk, with the same config, context and settings.
+//
+//	jevcli is "QUESTION"|NAME [input]           yes / no / unsure + P; exit 0 / 1 / 3 (4 on error)
+//	jevcli pick "QUESTION" key=desc ... [input]  the chosen key + confidence; exit 3 when unsure
+//	jevcli filter "QUESTION"|NAME [lines] [-v]   the input lines whose answer is yes (-v: the rest), like grep
+//	jevcli rank "QUESTION"|NAME [lines] [--top N] every line with P(yes), best first
+//
+// Input: stdin, --in, --lines or --states, as for ask. filter / rank read lines from stdin when none is given.
+func cmdVerb(verb string, args []string) {
+	valued := map[string]bool{"in": true, "lines": true, "states": true, "questions": true, "profile": true, "yes": true,
+		"no": true, "min": true, "parallel": true, "context": true, "top": true}
+	var pos, flags []string
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if strings.HasPrefix(a, "-") && a != "-" {
+			f := strings.TrimLeft(a, "-")
+			switch {
+			case f == "v" && verb == "filter":
+				outMode = "filter-v"
+				continue
+			case f == "top" && i+1 < len(args):
+				topN, _ = strconv.Atoi(args[i+1])
+				i++
+				continue
+			}
+			flags = append(flags, a)
+			if valued[f] && i+1 < len(args) {
+				flags = append(flags, args[i+1])
+				i++
+			}
+			continue
+		}
+		pos = append(pos, a)
+	}
+	if len(pos) == 0 {
+		die("usage: jevcli %s \"QUESTION\"|NAME ...  (see: jevcli help)", verb)
+	}
+	q := pos[0]
+	var qflag []string
+	if saved, ok := allQuestions(core.LoadConfig())[q]; ok && (verb != "pick") {
+		if saved.Type != "noul" && verb != "is" {
+			die("%s needs a yes/no question; %q is a %s", verb, q, saved.Type)
+		}
+		qflag = []string{q}
+	} else if verb == "pick" {
+		if len(pos) < 3 {
+			die(`usage: jevcli pick "QUESTION" key=desc key2=desc ...`)
+		}
+		qflag = []string{"--choice", "pick=" + q + "|" + strings.Join(pos[1:], ";")}
+	} else {
+		qflag = []string{"--noul", verb + "=" + q}
+	}
+	has := func(names ...string) bool {
+		for _, f := range flags {
+			for _, n := range names {
+				if strings.TrimLeft(f, "-") == n || strings.HasPrefix(strings.TrimLeft(f, "-"), n+"=") {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	switch verb {
+	case "is", "pick":
+		outMode = "bare"
+	case "filter", "rank":
+		if outMode == "" {
+			outMode = verb
+		}
+		if !has("lines", "states", "in") {
+			flags = append(flags, "--lines", "-")
+		}
+	}
+	cmdAsk(append(qflag, flags...))
 }

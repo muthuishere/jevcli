@@ -6,7 +6,11 @@ with a number or a key, and saves its own reasoning for the real work. The skill
 [`cmd/jevcli/skill/SKILL.md`](cmd/jevcli/skill/SKILL.md). It calls a small, vendor-neutral CLI:
 
 ```bash
-jevcli ask --noul urgent="Is this urgent?" < email.txt                   # urgent  yes  0.95  (exit 0/1/3/4)
+jevcli is "Is this urgent?" < email.txt                                   # yes 0.95  (exit 0 yes, 1 no, 3 unsure, 4 error)
+jevcli pick "Which team?" web=frontend api=backend --in "charged twice"    # api 0.9
+jevcli filter "Is this an error?" < app.log                                # grep by meaning
+jevcli rank "Is this about refunds?" --top 5 < results.txt                 # best first
+jevcli ask --noul urgent="Is this urgent?" < email.txt                     # the full command: many questions, batches
 jevcli question add team --choice "Which team?|web=frontend;api=backend"   # save a question once
 jevcli ask urgent,team < ticket.txt                                        # ask saved questions by name
 jevcli ask --lines app.log --noul err="Is this an error?"                  # batch: JSONL, one line per input
@@ -31,9 +35,10 @@ One input prints `NAME VERDICT P` per question (`--json`, `--raw`) and exits 0 y
 batch prints JSONL in input order (20 tickets: 8.2 s sequentially, 1.5 s at 8 parallel).
 
 ## Context
-`jevcli context set TEXT|@file [--profile P]` (global or per profile; a file is re-read at call time), `jevcli context
+Folder: `jevcli context set|add TEXT --local` and `jevcli question add NAME ... --local` write `./.jevcli/` (found from any
+subfolder, like `.git`; commit it with the repo). Global / profile: `jevcli context set TEXT|@file [--profile P]` (global or per profile; a file is re-read at call time), `jevcli context
 clear`, `jevcli context` (show). Per saved question: `question add NAME ... --context TEXT`. Per call: `ask|judge --context
-TEXT|@file` (repeatable). Order sent: global, profile, call; a question's context goes ahead of its instructions. A JSON
+TEXT|@file` (repeatable). Order sent: global, folder, profile, call; a question's context goes ahead of its instructions. A JSON
 input keeps its shape: the context is merged into its `"context"` field.
 
 ## Settings
