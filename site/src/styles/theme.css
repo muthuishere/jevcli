@@ -214,3 +214,8 @@ details.faq > summary:hover {
 
 /* Show operators as typed: conditions like "destroys >= 0.8" must not render as ligatures. */
 code, pre, kbd, .expressive-code, .expressive-code * { font-variant-ligatures: none; font-feature-settings: "liga" 0, "calt" 0; }
+
+/* Hero architecture diagram: give it room to be read. */
+@media (min-width: 50rem) { .hero { grid-template-columns: 6fr 5fr !important; } }
+.hero > .hero-html { width: min(100%, 40rem) !important; }
+.hero > .hero-html img { width: 100%; height: auto; }

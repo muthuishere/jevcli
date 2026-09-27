@@ -29,6 +29,18 @@ number or a key, never prose. The agent keeps its reasoning for the real work.
 5. **Any endpoint, nothing hidden.** Any System One URL works (keys stay in environment variables, expanded only when a
    request is sent). Replies are validated, 429/5xx are retried, and every call is logged without its content.
 
+## Why not call the API directly?
+
+You can `curl` a System One endpoint, and a service you write in code should. A coding agent should not have to: it
+would put your key into a command (and its own context), rebuild the noul/choice/score JSON each time, split requests at
+32 questions, retry 429s, reject malformed replies, turn a probability into a decision, and tell an outage apart from a
+"no". That is a few hundred tokens of error-prone work per question. `jevx is "Is this urgent?"` is one line, the key
+never leaves the environment, and the installed skill tells the agent when to use it. Your `## Jev` context, saved
+questions, parallel batches, hooks and the call log come with it.
+
+How it compares with the other Jev CLIs, MCP servers and hooks:
+[muthuishere.github.io/jevx/reference/comparison](https://muthuishere.github.io/jevx/reference/comparison/).
+
 ## Install
 
 ```bash

@@ -5,6 +5,8 @@ template: splash
 hero:
   title: Typed judgements for coding agents.
   tagline: Hand small decisions (is this urgent, which team, is this line an error) to a Jev-style decision model and get back a verdict with a probability, not prose.
+  image:
+    html: '<img src="/jevx/arch.svg" alt="jevx architecture: a coding agent asks jevx, jevx adds context and saved questions, calls a System One model, and returns a verdict with an exit code" width="560" height="470" style="width:100%;max-width:560px;height:auto" />'
   actions:
     - text: Get started
       link: /jevx/start/getting-started/
@@ -85,6 +87,20 @@ The same question as a batch, one JSON line per input, answered in parallel:
 	</Card>
 </CardGrid>
 
+<span class="jevx-eyebrow">Why not call the API directly?</span>
+## Because an agent should not have to
+
+You can call a System One endpoint with `curl`. A script you write once should. A coding agent should not, and here is what it would have to get right every time:
+
+- **The key.** To `curl` the API, the agent has to put the key in a command, where it lands in the transcript and the model's context. jevx reads `TYPESAFE_API_KEY` from the environment at send time; the agent never sees it.
+- **The request.** Noul, choice and score each have their own JSON shape and answer shape, requests cap at 32 questions, and replies can come back malformed. jevx builds the request, splits it, retries 429/5xx, and rejects a reply that does not answer exactly what was asked.
+- **The decision.** A raw probability is not a decision. jevx turns it into `yes` / `no` / `unsure` with your thresholds, and an exit code an `if` can use. An outage exits `4`, never a silent "no".
+- **The tokens.** A hand-written call is a few hundred tokens of JSON and parsing for the agent to write, per question. `jevx is "Is this urgent?"` is one line.
+- **Knowing when.** An agent does not know Jev exists. The installed skill tells it when to reach for it, how to word a question so it stands alone, and what to do when the answer is unsure.
+- **Everything around it.** Your `## Jev` context from AGENTS.md / CLAUDE.md, saved questions with tuned wording, parallel batches over files, hooks at agent events, and a content-free call log. None of that exists in a bare API call.
+
+If you are writing a service in code, call the API directly: jevx is for agents and shells.
+
 <span class="jevx-eyebrow">Inside an agent</span>
 ## The agent reads a skill, not these docs
 
@@ -132,5 +148,6 @@ Eighteen scenarios with the full commands and outputs, plus what to do when an a
 <CardGrid>
 	<LinkCard title="Getting started" description="Install, set your key, ask one question." href="/jevx/start/getting-started/" />
 	<LinkCard title="Agent scenarios" description="18 real agent situations with the exact answers, and how to fix an unsure." href="/jevx/guides/scenarios/" />
+	<LinkCard title="Compared with other Jev tools" description="What the other CLIs, MCP servers and hooks do, and where each is the better pick." href="/jevx/reference/comparison/" />
 	<LinkCard title="Using it from an agent" description="What the skill tells Claude Code and Codex to do." href="/jevx/guides/agents/" />
 </CardGrid>

@@ -74,6 +74,7 @@ export default defineConfig({
 						{ label: 'Privacy: what leaves your machine', slug: 'reference/privacy' },
 						{ label: 'CLI reference', slug: 'reference/cli' },
 						{ label: 'Config file', slug: 'reference/config' },
+						{ label: 'Compared with other Jev tools', slug: 'reference/comparison' },
 					],
 				},
 				{ label: 'FAQ', slug: 'faq' },
