@@ -7,7 +7,7 @@
 //	jevx uninstall                            remove the skill links and the hook template
 //	jevx hook enable|disable stop | mode shadow|block | profile NAME | status | review [N] | run stop
 //	jevx config show | set-endpoint PROFILE URL [MODEL] | default PROFILE
-//	jevx profile list | add NAME URL [--model M] [--header 'K: V' ...] [--questions FILE] [--context TEXT] | use NAME | remove NAME | show NAME
+//	jevx profile list | add NAME URL [--model M] [--header 'K: V' ...] [--questions FILE] | use NAME | remove NAME | show NAME
 package main
 
 import (
@@ -47,7 +47,7 @@ func (m *multi) Set(v string) error { *m = append(*m, v); return nil }
 func ask(name string, p core.Profile, state string, qs map[string]any, extra ...string) map[string]core.Answer {
 	ans, err := core.Ask(p, core.LoadConfig().WithContext(p, state, extra...), qs, 60*time.Second)
 	if errors.Is(err, core.ErrNeedKey) {
-		die("profile %s needs %s in the environment (the profile references it): export %s=...", name, core.MissingEnv(p), core.MissingEnv(p))
+		die("%s", core.NeedKeyHelp(name, p))
 	}
 	if err != nil {
 		die("%v", err)
@@ -514,17 +514,32 @@ func main() {
 func cmdProfile(args []string) {
 	cfg := core.LoadConfig()
 	if len(args) == 0 || args[0] == "list" {
-		for _, n := range keys(cfg.Profiles) {
-			p := cfg.Profiles[n]
+		all := map[string]core.Profile{core.BuiltinName: core.BuiltinProfile}
+		for k, p := range cfg.Profiles {
+			all[k] = p
+		}
+		def, _, _ := cfg.Profile("")
+		for _, n := range keys(all) {
+			p := all[n]
+			if p.URL == "" {
+				continue // the empty placeholder of older configs
+			}
 			mark := " "
-			if n == cfg.Default {
+			if n == def {
 				mark = "*"
+			}
+			if _, own := cfg.Profiles[n]; !own {
+				p.Note = "built in"
 			}
 			hs := ""
 			for _, h := range keys(p.Headers) {
 				hs += "  " + h + ": " + p.Headers[h]
 			}
-			pr("%s %-10s %s  model=%s%s", mark, n, p.URL, p.Model, hs)
+			note := ""
+			if p.Note == "built in" {
+				note = "  (built in)"
+			}
+			pr("%s %-10s %s  model=%s%s%s", mark, n, p.URL, p.Model, hs, note)
 		}
 		pr("(* = default; change with: jevx profile use NAME)")
 		return
@@ -536,7 +551,7 @@ func cmdProfile(args []string) {
 	}
 	switch args[0] {
 	case "add":
-		need(3, "add NAME URL [--model M] [--header 'K: V' ...] [--questions FILE] [--context TEXT]")
+		need(3, "add NAME URL [--model M] [--header 'K: V' ...] [--questions FILE]")
 		fs := flag.NewFlagSet("profile add", flag.ExitOnError)
 		m, q := fs.String("model", "default", "model name"), fs.String("questions", "", "question pack JSON")
 		var hdr multi
@@ -554,12 +569,15 @@ func cmdProfile(args []string) {
 		if ph, ok := cfg.Profiles["default"]; ok && ph.URL == "" && args[1] != "default" {
 			delete(cfg.Profiles, "default") // the seeded placeholder is replaced by the first real profile
 		}
-		if cfg.Default == "" || cfg.Profiles[cfg.Default].URL == "" {
+		if _, _, err := cfg.Profile(""); err != nil { // no working default yet: the new profile becomes it
 			cfg.Default = args[1]
+		}
+		if cfg.Default != args[1] {
+			pr("added %s; the default stays %s (switch: jevx profile use %s, or --profile %s per call)", args[1], cfg.Default, args[1], args[1])
 		}
 	case "use":
 		need(2, "use NAME")
-		if _, ok := cfg.Profiles[args[1]]; !ok {
+		if _, ok := cfg.Profiles[args[1]]; !ok && args[1] != core.BuiltinName {
 			die("no profile %q", args[1])
 		}
 		cfg.Default = args[1]

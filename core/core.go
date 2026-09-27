@@ -237,14 +237,15 @@ func migrate() {
 	}
 }
 
+// BuiltinProfile is hosted Jev: works with no config at all once TYPESAFE_API_KEY is in the environment. A profile of the
+// same name in the config overrides it; any other endpoint is a custom profile (jevx profile add).
+const BuiltinName = "jev"
+
+var BuiltinProfile = Profile{URL: "https://api.typesafe.ai/v1/systemone", Model: "jev-latest",
+	Headers: map[string]string{"Authorization": "Bearer $TYPESAFE_API_KEY"}}
+
 func DefaultConfig() Config {
-	return Config{
-		Default: "default",
-		Profiles: map[string]Profile{
-			"default": {URL: "", Model: "", Note: "set with: jevx profile add NAME URL --model M --header 'Authorization: Bearer $VAR'"},
-		},
-		Plugins: shipped(),
-	}
+	return Config{Default: BuiltinName, Profiles: map[string]Profile{}, Plugins: shipped()}
 }
 
 // LoadConfig reads the user's config; the built-in profiles only seed a config that does not exist yet.
@@ -299,14 +300,30 @@ func (c Config) Profile(name string) (string, Profile, error) {
 	if name == "" {
 		name = c.Default
 	}
+	// No default chosen, or the empty "default" placeholder of older configs: use the built-in hosted Jev.
+	if name == "" || (name == "default" && c.Profiles["default"].URL == "") {
+		name = BuiltinName
+	}
 	p, ok := c.Profiles[name]
+	if !ok && name == BuiltinName {
+		return name, BuiltinProfile, nil
+	}
 	if !ok {
-		return name, p, fmt.Errorf("no profile %q (have: %s)", name, strings.Join(keys(c.Profiles), ", "))
+		return name, p, fmt.Errorf("no profile %q (have: %s)", name, strings.Join(append(keys(c.Profiles), BuiltinName+" (built in)"), ", "))
 	}
 	if p.URL == "" {
 		return name, p, fmt.Errorf("profile %q has no url: jevx profile add %s URL --model M [--header 'K: V']", name, name)
 	}
 	return name, p, nil
+}
+
+// NeedKeyHelp explains a missing key: for the built-in profile, how to get going; otherwise which variable to set.
+func NeedKeyHelp(name string, p Profile) string {
+	v := MissingEnv(p)
+	if name == BuiltinName && v == "TYPESAFE_API_KEY" {
+		return "set your Jev API key: export TYPESAFE_API_KEY=... (from typesafe.ai). Or use another endpoint: jevx profile add NAME URL --model M --header 'Authorization: Bearer $YOUR_VAR' && jevx profile use NAME"
+	}
+	return fmt.Sprintf("profile %s needs %s in the environment: export %s=...", name, v, v)
 }
 
 func keys[V any](m map[string]V) []string {

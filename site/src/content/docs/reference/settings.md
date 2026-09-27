@@ -64,7 +64,7 @@ jevx profile remove hosted
 
 ```console
 $ jevx profile add -h
-jevx: usage: jevx profile add NAME URL [--model M] [--header 'K: V' ...] [--questions FILE] [--context TEXT]
+jevx: usage: jevx profile add NAME URL [--model M] [--header 'K: V' ...] [--questions FILE]
 ```
 
 ## Files and environment

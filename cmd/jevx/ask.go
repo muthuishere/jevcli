@@ -342,7 +342,7 @@ func cmdAsk(args []string) {
 	}
 	ans, model, err := askChunks(p, cfg.WithContext(p, state, callCtx(ctxs)...), qs, set)
 	if errors.Is(err, core.ErrNeedKey) {
-		die("profile %s needs %s in the environment", name, core.MissingEnv(p))
+		die("%s", core.NeedKeyHelp(name, p))
 	}
 	if err != nil {
 		die("%v", err)
@@ -398,6 +398,9 @@ func batch(cfg core.Config, p core.Profile, qs map[string]core.Question, set cor
 			var ans map[string]core.Answer
 			if err == nil {
 				ans, _, err = askChunks(p, cfg.WithContext(p, state, extra...), qs, set)
+			}
+			if errors.Is(err, core.ErrNeedKey) {
+				err = errors.New(core.NeedKeyHelp("", p))
 			}
 			if err != nil {
 				rows[i].Error = err.Error()

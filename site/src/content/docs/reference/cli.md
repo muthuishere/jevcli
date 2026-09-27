@@ -40,7 +40,7 @@ jevx: usage: jevx rank "QUESTION"|NAME ...  (see: jevx help)
 ```text title="usage lines"
 jevx: usage: jevx question add NAME --noul "QUESTION" | --choice "QUESTION|k=desc;k2=desc" | --score "QUESTION|low;mid;high" [--yes 0.85 --no 0.15 --min 0.6]
 jevx: usage: jevx defaults [show] | set KEY VALUE | unset KEY  [--profile P]   keys: yes, no, min_confidence, parallel, retries, timeout_s, chunk, ledger, accept_min, more_max
-jevx: usage: jevx profile add NAME URL [--model M] [--header 'K: V' ...] [--questions FILE] [--context TEXT]
+jevx: usage: jevx profile add NAME URL [--model M] [--header 'K: V' ...] [--questions FILE]
 ```
 
 ## Hooks and plugins

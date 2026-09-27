@@ -162,9 +162,11 @@ skill works but plugins do not run yet.
 
 ```bash
 curl -fsSL https://muthuishere.github.io/jevx/install.sh | sh      # this skill for Claude Code, Codex and ~/.agents
-jevx profile add jev https://your-endpoint/v1/systemone --model MODEL --header "Authorization: Bearer $YOUR_KEY_VAR"
+export TYPESAFE_API_KEY=...   # the user's key: hosted Jev works with no config at all
+jevx profile add local http://127.0.0.1:21131/v1/systemone --model myjev   # only for a custom endpoint
 ```
-If a call fails with "no url" or "needs $VAR", tell the user which profile or variable is missing. Do not guess one.
+If a call exits 4 asking for `TYPESAFE_API_KEY` (or another variable), tell the user which variable to set. Do not
+guess one, and never ask them to paste a key into the chat.
 
 ## Never
 - Use it as a safety gate. Permissions, money, legal and irreversible calls stay with the user.

@@ -1,6 +1,6 @@
 ---
 title: Getting started
-description: Install jevx, point it at an endpoint, and ask your first question. About two minutes.
+description: Install jevx, set your key, and ask your first question. About two minutes.
 ---
 
 ## 1. Install
@@ -19,22 +19,42 @@ curl -fsSLo install.cmd https://muthuishere.github.io/jevx/install.cmd && instal
 
 Each one puts the `jevx` binary on your PATH, copies the agent skill into `~/.claude/skills`, `~/.agents/skills` and `~/.codex/skills` (if that folder exists), and adds the Claude Code hook entries, which stay disabled. `JEVX_NO_HOOK=1` installs the skills only. Details in [Install](/jevx/start/install/).
 
-## 2. Point it at an endpoint
+## 2. Set your key
 
-A profile is a URL, a model name and headers. `$VAR` inside any of them is expanded from your environment at request time and never written to disk, so the key stays out of the config file.
+jevx talks to hosted Jev out of the box. There is nothing to configure: put your key in the environment and you are done.
 
-```bash title="Terminal" "$YOUR_KEY_VAR"
-jevx profile add jev https://your-endpoint/v1/systemone --model MODEL --header "Authorization: Bearer $YOUR_KEY_VAR"
+```bash title="~/.zshrc or ~/.bashrc"
+export TYPESAFE_API_KEY=...        # your key from typesafe.ai
+```
+
+jevx reads the variable when a request is sent and never writes it anywhere. Without it, every call stops with a clear
+message and exit code `4` (never a fake "no"):
+
+```console
+$ echo "Prod is down" | jevx is "Is this urgent?"
+jevx: set your Jev API key: export TYPESAFE_API_KEY=... (from typesafe.ai). Or use another endpoint: jevx profile add NAME URL --model M --header 'Authorization: Bearer $YOUR_VAR' && jevx profile use NAME
+```
+
+### Optional: your own endpoint
+
+Only if you run a different System One endpoint (a self-hosted model, a personal model on your machine, another
+provider), add a **profile**: a URL, a model and headers. `$VAR` in any of them is expanded at request time, so keys
+stay out of the config file.
+
+```bash title="Terminal"
+jevx profile add local http://127.0.0.1:21131/v1/systemone --model myjev        # a local model: no key needed
+jevx profile add acme https://jev.acme.dev/v1/systemone --model jev-latest --header "Authorization: Bearer $ACME_KEY"
 ```
 
 ```console
 $ jevx profile list
-* jev        https://api.typesafe.ai/v1/systemone  model=jev-latest  Authorization: Bearer $TYPESAFE_API_KEY
-  myjev      http://127.0.0.1:21131/v1/systemone  model=myjev
+* jev        https://api.typesafe.ai/v1/systemone  model=jev-latest  Authorization: Bearer $TYPESAFE_API_KEY  (built in)
+  local      http://127.0.0.1:21131/v1/systemone  model=myjev
 (* = default; change with: jevx profile use NAME)
 ```
 
-The first profile you add becomes the default. `jevx profile use NAME` changes it; `--profile NAME` overrides it for one call. A local model needs no header at all (the `myjev` line above). The key is listed as the literal `$TYPESAFE_API_KEY`, never its value.
+The built-in `jev` stays the default. Use a custom one for a single call with `--profile local`, or make it the default
+with `jevx profile use local`.
 
 ## 3. Ask something
 
