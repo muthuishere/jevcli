@@ -29,15 +29,11 @@ number or a key, never prose. The agent keeps its reasoning for the real work.
 5. **Any endpoint, nothing hidden.** Any System One URL works (keys stay in environment variables, expanded only when a
    request is sent). Replies are validated, 429/5xx are retried, and every call is logged without its content.
 
-## Jev, agent ready
+## Jev, for your day-to-day work
 
-Jev is great at small, typed decisions in well under a second. If you are building your own agent or service, call
-its API from your code: that is the right tool, and you do not need jevx.
-
-jevx is for the other case: you work inside a coding agent like Claude Code or Codex and want the same quick decisions
-there, without writing an integration. Install it once, set your key, and your agent can filter a log, route a ticket,
-rank results or check a command before running it, in one line. The installed skill tells the agent when that helps,
-and every answer comes back as `yes` / `no` / `unsure` with an exit code it can act on.
+Jev has been for people building LLM applications. jevx puts it in your day-to-day work: inside Claude Code and Codex,
+with the instructions you already keep as its context. If you are building your own LLM app, call Jev's API directly;
+jevx is for everything else.
 
 How it compares with the other Jev CLIs, MCP servers and hooks:
 [muthuishere.github.io/jevx/reference/comparison](https://muthuishere.github.io/jevx/reference/comparison/).

@@ -219,3 +219,6 @@ code, pre, kbd, .expressive-code, .expressive-code * { font-variant-ligatures: n
 @media (min-width: 50rem) { .hero { grid-template-columns: 6fr 5fr !important; } }
 .hero > .hero-html { width: min(100%, 40rem) !important; }
 .hero > .hero-html img { width: 100%; height: auto; }
+
+/* Landing: three idea cards on one row when there is room. */
+@media (min-width: 60rem) { .sl-markdown-content .card-grid:has(> .card:nth-child(3):last-child) { grid-template-columns: repeat(3, 1fr); } }
