@@ -22,7 +22,7 @@ returned. `askMany` splits a request into chunks of 32 questions (servers cap qu
 | `core/questions.json` | built-in neutral question pack for `judge` (ids: accepts, wanted_more, reaction, satisfaction) |
 | `cmd/jevcli/main.go` | ask, judge, query, install / uninstall, hook, config, profile |
 | `cmd/jevcli/recipes.go` | cookbook recipes: verify, same, rank, find, extract, tree, score, pick-skill, pick-func, run; `ask --route`, `ask --samples` |
-| `cmd/jevcli/skill.md` | the agent skill `jevcli install` writes into Claude Code and Codex skill dirs |
+| `cmd/jevcli/skill/` | the agent skill (`SKILL.md` + `references/cookbook.md`, every recipe with real output); `jevcli install` writes the whole dir into Claude Code and Codex skill dirs, `jevcli cookbook` prints the cookbook |
 
 Build: `go build -o bin/jevcli ./cmd/jevcli` (Go 1.26, stdlib only). Installed copy on the Mac:
 `~/.local/share/jevcli/jevcli`, linked from `~/.local/bin/jevcli`.

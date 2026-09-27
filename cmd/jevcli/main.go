@@ -11,12 +11,13 @@
 package main
 
 import (
-	_ "embed"
+	"embed"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
+	iofs "io/fs"
 	"os"
 	"sync"
 
@@ -29,8 +30,8 @@ import (
 	"github.com/muthuishere/jevcli/core"
 )
 
-//go:embed skill.md
-var skillMD []byte
+//go:embed skill
+var skillFS embed.FS
 
 func die(f string, a ...any) { fmt.Fprintf(os.Stderr, "jevcli: "+f+"\n", a...); os.Exit(1) }
 
@@ -276,8 +277,15 @@ func cmdInstall(args []string) {
 	if !*noSkill {
 		for _, d := range skillDirs() {
 			dst := filepath.Join(d, "jevcli")
-			_ = os.MkdirAll(dst, 0o755)
-			if err := os.WriteFile(filepath.Join(dst, "SKILL.md"), skillMD, 0o644); err != nil {
+			err := iofs.WalkDir(skillFS, "skill", func(p string, e iofs.DirEntry, _ error) error {
+				out := filepath.Join(dst, strings.TrimPrefix(strings.TrimPrefix(p, "skill"), "/"))
+				if e.IsDir() {
+					return os.MkdirAll(out, 0o755)
+				}
+				b, _ := skillFS.ReadFile(p)
+				return os.WriteFile(out, b, 0o644)
+			})
+			if err != nil {
 				die("%v", err)
 			}
 			pr("skill    %s", dst)
@@ -588,6 +596,9 @@ func main() {
 		cmdHook(a)
 	case "config":
 		cmdConfig(a)
+	case "cookbook":
+		b, _ := skillFS.ReadFile("skill/references/cookbook.md")
+		os.Stdout.Write(b)
 	case "query", "q":
 		cmdQuery(a)
 	case "profile", "profiles":

@@ -1,6 +1,6 @@
 ---
 name: jevcli
-description: Ask a Jev-style decision model (any System One endpoint configured in jevcli) what the user would decide, before bothering them. Use when you are about to ask the user to pick between options, when you wonder whether the user would accept your turn as it is, or to check you did not stop short. Trigger: what would the user pick, would the user accept this, ask jev, decide like me, should I ask the user, what do you say.
+description: Ask a Jev-style decision model (any System One endpoint configured in jevcli) what the user would decide, before bothering them. Use when you are about to ask the user to pick between options, when you wonder whether the user would accept your turn as it is, or to check you did not stop short. Also the fast fuzzy if / switch / classifier for scripts and agents, against any Jev-like (System One) endpoint: triage, classify, route, dedupe, rank, semantic grep, extract, verify a claim, batch many items in parallel. Trigger: what would the user pick, feels, classify these, triage, is this urgent, would the user accept this, ask jev, decide like me, should I ask the user, what do you say.
 ---
 
 # jevcli: ask a decision model before asking the user
@@ -42,6 +42,7 @@ A states file has one JSON object or JSON string per line. A question set is `{"
 on the lines that pass (for example `jq 'select(.answers.urgent.noul > .7)'`). A "while" is a shell loop around `feels`.
 
 ## Cookbook recipes (all use the same profiles)
+Full cookbook with real outputs: `references/cookbook.md` (or `jevcli cookbook`). Read it when a task fits a recipe.
 
 | command | use it for |
 |---|---|
