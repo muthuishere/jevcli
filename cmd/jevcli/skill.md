@@ -34,6 +34,7 @@ ask the user and include the lean in one line ("jevcli leans stop, 0.51"). When 
 
 | command | use it for |
 |---|---|
+| `jevcli query --state '{...}' --noul a="..." --noul b="..." [--choice n="I|k=d;k2=d"] [--raw]` | the native call: many named questions about one (JSON or text) state in one request |
 | `jevcli ask Q --option k=desc ... [--route 0.8,0.5] [--samples 5]` | classify / route; `--route` prints act, confirm or escalate (exit 0/10/20); `--samples` checks self-consistency |
 | `jevcli verify --claim TEXT --source @file` | is a claim or citation supported by the source |
 | `jevcli same --a TEXT --b TEXT --what "customer record"` | are two records the same entity (dedupe, alignment) |

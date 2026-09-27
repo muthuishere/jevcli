@@ -1,6 +1,7 @@
 // jevcli: ask any System One (Jev-contract) endpoint what the user would decide, and wire it into agents.
 //
 //	jevcli ask QUESTION [--context TEXT|-] [--option KEY=DESC ... | --true DESC --false DESC] [--profile P] [--json]
+//	jevcli query --state TEXT|JSON|@file|- --noul NAME=INSTRUCTIONS ... [--choice NAME="INSTR|k=desc;k2=desc"] [--score NAME="INSTR|L0;L1;L2"] [--raw]
 //	jevcli judge --request TEXT --proposal TEXT [--action LINE ...] [--profile P] [--json]
 //	jevcli install [--no-skill] [--no-hook]     skill into Claude Code + Codex, Stop-hook template (inert until enabled)
 //	jevcli uninstall                            remove the skill links and the hook template
@@ -586,6 +587,8 @@ func main() {
 		cmdHook(a)
 	case "config":
 		cmdConfig(a)
+	case "query", "q":
+		cmdQuery(a)
 	case "profile", "profiles":
 		cmdProfile(a)
 	case "verify", "same", "rank", "find", "extract", "tree", "pick-skill", "pick-func", "run", "score":
@@ -674,4 +677,87 @@ func keys[V any](m map[string]V) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// cmdQuery is the native System One call: one state (plain text or a JSON object, sent as its JSON text), many named
+// questions. It prints the answers the way the API returns them; --raw prints the whole response (model, usage, id).
+func cmdQuery(args []string) {
+	fs := flag.NewFlagSet("query", flag.ExitOnError)
+	st, prof, raw := fs.String("state", "", "the state: text, a JSON object, @file or -"), fs.String("profile", "", "endpoint profile"), fs.Bool("raw", false, "print the full response")
+	var nouls, choices, scores multi
+	fs.Var(&nouls, "noul", `NAME=INSTRUCTIONS (repeat); optional criteria: NAME="INSTR|true text|false text"`)
+	fs.Var(&choices, "choice", `NAME="INSTRUCTIONS|key=desc;key2=desc2" (repeat)`)
+	fs.Var(&scores, "score", `NAME="INSTRUCTIONS|level0;level1;level2" (repeat, lowest first)`)
+	_ = fs.Parse(args)
+	if *st == "" || len(nouls)+len(choices)+len(scores) == 0 {
+		die("usage: jevcli query --state TEXT|JSON|@file --noul NAME=INSTRUCTIONS [...]")
+	}
+	state := strings.TrimSpace(text(*st))
+	if strings.HasPrefix(state, "{") { // a structured state travels as its compact JSON text, as the API expects
+		var v any
+		if json.Unmarshal([]byte(state), &v) != nil {
+			die("--state looks like JSON but does not parse")
+		}
+		b, _ := json.Marshal(v)
+		state = string(b)
+	}
+	split := func(spec string) (string, []string) {
+		name, rest, ok := strings.Cut(spec, "=")
+		if !ok || strings.TrimSpace(name) == "" {
+			die("want NAME=INSTRUCTIONS, got %q", spec)
+		}
+		return strings.TrimSpace(name), strings.Split(rest, "|")
+	}
+	qs := map[string]any{}
+	for _, n := range nouls {
+		name, parts := split(n)
+		q := map[string]any{"type": "noul", "instructions": strings.TrimSpace(parts[0])}
+		if len(parts) == 3 {
+			q["criteria"] = map[string]string{"true": strings.TrimSpace(parts[1]), "false": strings.TrimSpace(parts[2])}
+		}
+		qs[name] = q
+	}
+	for _, c := range choices {
+		name, parts := split(c)
+		if len(parts) != 2 {
+			die("--choice %s: want \"INSTRUCTIONS|key=desc;key2=desc2\"", name)
+		}
+		crit := map[string]string{}
+		for _, o := range strings.Split(parts[1], ";") {
+			k, v, _ := strings.Cut(o, "=")
+			if v == "" {
+				v = k
+			}
+			crit[strings.TrimSpace(k)] = strings.TrimSpace(v)
+		}
+		qs[name] = map[string]any{"type": "choice", "instructions": strings.TrimSpace(parts[0]), "criteria": crit}
+	}
+	for _, sc := range scores {
+		name, parts := split(sc)
+		if len(parts) != 2 {
+			die("--score %s: want \"INSTRUCTIONS|level0;level1\"", name)
+		}
+		var lv []string
+		for _, l := range strings.Split(parts[1], ";") {
+			lv = append(lv, strings.TrimSpace(l))
+		}
+		qs[name] = map[string]any{"type": "score", "instructions": strings.TrimSpace(parts[0]), "criteria": lv}
+	}
+	name, p := resolve(*prof)
+	ans := askMany(name, p, state, qs)
+	if *raw && len(qs) <= 32 {
+		var v any
+		_ = json.Unmarshal(core.LastRaw, &v)
+		b, _ := json.MarshalIndent(v, "", "  ")
+		pr("%s", b)
+		return
+	}
+	var model any
+	if len(core.LastRaw) > 0 {
+		var v map[string]any
+		_ = json.Unmarshal(core.LastRaw, &v)
+		model = v["model"]
+	}
+	b, _ := json.MarshalIndent(map[string]any{"profile": name, "model": model, "answers": ans}, "", "  ")
+	pr("%s", b)
 }

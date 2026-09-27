@@ -11,6 +11,16 @@ jevcli ask "The agent wants to force-push to main." --context "..." --true "The 
 jevcli judge --request "the user's request" --proposal "the agent's final message" --action "Bash: go test ./..."
 ```
 
+The native call, one state and many named questions, answered in one request:
+
+```bash
+jevcli query --state '{"role": "You are playing Super Smash Bros and receive messages from a teammate", "message": "go for the ledge"}' \
+  --noul is_appropriate="Does the message contain inappropriate language or topics?" \
+  --noul does_this_help="Does this help donkey kong win?" --raw
+# {"answers": {"does_this_help": {"noul": 0.75, ...}, "is_appropriate": {"noul": 0.06, ...}}, "model": "jev-1.13.0", "usage": {...}}
+```
+`--choice NAME="INSTRUCTIONS|key=desc;key2=desc"` and `--score NAME="INSTRUCTIONS|level0;level1"` mix in other types.
+
 The context lives in the question: the instructions and each option or criterion say whose decision it is and what is
 judged. `judge` asks four turn-level questions from a **question pack** (JSON). The built-in pack is neutral; a profile can
 point to its own pack (`"questions": "/path/pack.json"`), which matters for a model trained on specific wording.

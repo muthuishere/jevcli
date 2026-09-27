@@ -277,6 +277,7 @@ func Ask(p Profile, state string, qs map[string]any, timeout time.Duration) (map
 	if resp.StatusCode/100 != 2 {
 		return nil, fmt.Errorf("%s: HTTP %d: %s", p.URL, resp.StatusCode, strings.TrimSpace(string(raw))[:min(300, len(strings.TrimSpace(string(raw))))])
 	}
+	LastRaw = raw
 	var out struct {
 		Answers map[string]Answer `json:"answers"`
 	}
@@ -285,6 +286,9 @@ func Ask(p Profile, state string, qs map[string]any, timeout time.Duration) (map
 	}
 	return out.Answers, nil
 }
+
+// LastRaw is the full body of the last successful response (model, answers, usage, id), for commands that print it as is.
+var LastRaw []byte
 
 // P returns an answer's probability of yes (noul / Vercel-style "probability").
 func (a Answer) P() float64 {
