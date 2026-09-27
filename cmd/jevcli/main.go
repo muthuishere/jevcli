@@ -30,6 +30,9 @@ import (
 	"github.com/muthuishere/jevcli/core"
 )
 
+// version is set at release time with -ldflags "-X main.version=v1.2.3".
+var version = "dev"
+
 //go:embed skill
 var skillFS embed.FS
 
@@ -236,17 +239,25 @@ func cmdJudge(args []string) {
 
 // ------------------------------------------------------------------ install: skill + hook template
 
+// skillDirs are the global skill dirs: Claude Code (~/.claude, $CLAUDE_CONFIG_DIR) and the cross-agent ~/.agents are
+// created if missing; Codex only if ~/.codex exists.
 func skillDirs() []string {
 	h := core.Home()
 	var out []string
-	for _, d := range []string{filepath.Join(os.Getenv("CLAUDE_CONFIG_DIR"), "skills"), filepath.Join(h, ".claude/skills"), filepath.Join(h, ".codex/skills")} {
+	for _, d := range []string{filepath.Join(os.Getenv("CLAUDE_CONFIG_DIR"), "skills"), filepath.Join(h, ".claude/skills"), filepath.Join(h, ".agents/skills"), filepath.Join(h, ".codex/skills")} {
 		if strings.HasPrefix(d, "skills") { // CLAUDE_CONFIG_DIR unset
 			continue
 		}
+		if strings.HasSuffix(d, filepath.Join(".codex", "skills")) {
+			if _, err := os.Stat(filepath.Dir(d)); err != nil {
+				continue
+			}
+		}
+		_ = os.MkdirAll(d, 0o755)
 		if r, err := filepath.EvalSymlinks(d); err == nil {
 			d = r
 		}
-		if st, err := os.Stat(d); err == nil && st.IsDir() && !contains(out, d) {
+		if !contains(out, d) {
 			out = append(out, d)
 		}
 	}
@@ -596,6 +607,8 @@ func main() {
 		cmdHook(a)
 	case "config":
 		cmdConfig(a)
+	case "version", "--version", "-v":
+		pr("jevcli %s", version)
 	case "cookbook":
 		b, _ := skillFS.ReadFile("skill/references/cookbook.md")
 		os.Stdout.Write(b)

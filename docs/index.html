@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>jevcli</title>
+<meta name="description" content="A fuzzy if, switch and classifier for your shell and your coding agents, on any Jev-like (System One) decision model.">
+<style>
+:root { --bg:#fbfaf7; --fg:#1d1c1a; --mute:#6b6760; --line:#e4e0d8; --code:#f1eee7; --accent:#b4441f; }
+@media (prefers-color-scheme: dark) { :root { --bg:#141312; --fg:#ece9e3; --mute:#9b968d; --line:#2c2a27; --code:#1d1c1a; --accent:#ec7a52; } }
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.6 ui-sans-serif, system-ui, -apple-system, sans-serif; }
+main { max-width: 760px; margin: 0 auto; padding: 56px 16px 80px; }
+h1 { font-size: 2.4rem; margin: 0 0 4px; letter-spacing: -0.02em; }
+h2 { font-size: 1.1rem; margin: 44px 0 10px; }
+p.lead { font-size: 1.15rem; color: var(--mute); margin: 0 0 28px; }
+pre { background: var(--code); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; overflow-x: auto; font: 14px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .92em; }
+.c { color: var(--mute); }
+.k { color: var(--accent); }
+a { color: var(--accent); }
+ul { padding-left: 20px; }
+footer { margin-top: 56px; color: var(--mute); font-size: .9rem; border-top: 1px solid var(--line); padding-top: 16px; }
+</style>
+</head>
+<body>
+<main>
+<h1>jevcli</h1>
+<p class="lead">A fuzzy <code>if</code>, <code>switch</code> and classifier for your shell and your coding agents, on any Jev-like (System One) decision model. Each call takes about 0.4 s, and batches run in parallel.</p>
+
+<h2>Install</h2>
+<pre><span class="c"># macOS / Linux</span>
+curl -fsSL https://muthuishere.github.io/jevcli/install.sh | sh
+
+<span class="c"># Windows (cmd)</span>
+curl -fsSLo install.cmd https://muthuishere.github.io/jevcli/install.cmd &amp;&amp; install.cmd</pre>
+<p>The installer puts the binary on your PATH, installs the agent skill in <code>~/.claude/skills</code> and <code>~/.agents/skills</code> (and <code>~/.codex/skills</code> if that folder exists), and adds a Claude Code Stop-hook template that stays <b>off</b> until you run <code>jevcli hook enable stop</code>. Set <code>JEVCLI_NO_HOOK=1</code> to install the skills only, or <code>JEVCLI_VERSION=v0.1.0</code> to pin a version.</p>
+<pre>jevcli profile add jev https://your-endpoint/v1/systemone --model MODEL --header "Authorization: Bearer $YOUR_KEY_VAR"</pre>
+
+<h2>If, switch, while</h2>
+<pre><span class="k">if</span> jevcli feels urgent &lt; email.txt; <span class="k">then</span> claude -p "Draft a reply" &lt; email.txt; <span class="k">fi</span>
+
+<span class="k">case</span> $(jevcli match billing="about money" bug="a defect" other="anything else" &lt; msg.txt) <span class="k">in</span>
+  billing) ... ;;  bug) ... ;;
+<span class="k">esac</span>
+
+<span class="k">while</span> ! jevcli feels "Is the build green?" --input @status.txt -q; <span class="k">do</span> sleep 30; <span class="k">done</span></pre>
+
+<h2>Many at once</h2>
+<pre>jevcli query --states tickets.jsonl --parallel 8 --noul urgent="Is this urgent?" \
+  | jq -c 'select(.answers.urgent.noul &gt; .7)'
+<span class="c"># 20 tickets: 8.2 s one at a time, 1.5 s at --parallel 8</span></pre>
+
+<h2>Recipes</h2>
+<ul>
+<li><code>verify</code> checks whether a source supports a claim or citation. <code>same</code> checks whether two records are the same entity, for deduping.</li>
+<li><code>rank</code> re-ranks search results. <code>find</code> is a semantic grep. <code>extract</code> pulls a date, amount, email or URL from text.</li>
+<li><code>score</code> rates on your own levels. <code>tree</code> classifies down a taxonomy. <code>pick-func</code> and <code>pick-skill</code> choose the function to call or the skill to load.</li>
+<li><code>ask --route</code> returns act, confirm or escalate, and <code>--samples</code> repeats the question to check agreement. <code>judge</code> checks whether you would accept an agent's turn.</li>
+</ul>
+<p>The full cookbook with real outputs is at <a href="cookbook.md">cookbook.md</a>, or run <code>jevcli cookbook</code>.</p>
+
+<footer>Jev judges; it does not write. Pair it with any LLM for the text. It works with the hosted Jev, a self-hosted model, or your own.</footer>
+</main>
+</body>
+</html>

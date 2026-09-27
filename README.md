@@ -4,6 +4,15 @@ A small, vendor-neutral CLI for **System One / Jev-style decision models**: mode
 questions (Noul = a probability, Choice = one of several options, Score = a level) instead of writing text. Point it at any
 compatible endpoint (hosted, self-hosted or a personal model) and use it from the shell or from coding agents.
 
+## Install
+```bash
+curl -fsSL https://muthuishere.github.io/jevcli/install.sh | sh                                   # macOS / Linux
+curl -fsSLo install.cmd https://muthuishere.github.io/jevcli/install.cmd && install.cmd          # Windows
+```
+This installs the binary, puts the agent skill in `~/.claude/skills` and `~/.agents/skills` (and `~/.codex/skills` if
+present), and adds the Claude Code Stop-hook template, which stays disabled. `JEVCLI_NO_HOOK=1` installs the skills only.
+Releases are cut by pushing a `v*` tag (`.github/workflows/release.yml`). The site is `docs/`, published by `pages.yml`.
+
 ```bash
 jevcli config set-endpoint default https://your-endpoint/v1/systemone MODEL [KEY_ENV]
 jevcli ask "Which should the agent do next?" --context "..." --option "stop=Stop and report" --option "run=Go ahead"
