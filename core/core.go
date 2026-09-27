@@ -18,7 +18,6 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"syscall"
 	"time"
 )
 
@@ -591,7 +590,7 @@ func Detach(args []string, stdinFile string) error {
 		return err
 	}
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = in, nil, nil
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	detachAttr(cmd)
 	return cmd.Start()
 }
 
