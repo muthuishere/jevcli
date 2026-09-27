@@ -22,7 +22,7 @@ returned. `askMany` splits a request into chunks of 32 questions (servers cap qu
 | `core/questions.json` | built-in neutral question pack for `judge` (ids: accepts, wanted_more, reaction, satisfaction) |
 | `cmd/jevcli/main.go` | ask, judge, query, install / uninstall, hook, config, profile |
 | `cmd/jevcli/recipes.go` | cookbook recipes: verify, same, rank, find, extract, tree, score, pick-skill, pick-func, run; `ask --route`, `ask --samples` |
-| `cmd/jevcli/skill/` | the agent skill (`SKILL.md` + `references/cookbook.md`, every recipe with real output); `jevcli install` writes the whole dir into Claude Code and Codex skill dirs, `jevcli cookbook` prints the cookbook |
+| `cmd/jevcli/skill/SKILL.md` | **the product**: the agent skill (is / which / ask / judge, when to reach for it, the trust rule). `jevcli install` writes it to ~/.claude, ~/.agents, ~/.codex; `jevcli skill` prints it |
 
 Build: `go build -o bin/jevcli ./cmd/jevcli` (Go 1.26, stdlib only). Installed copy on the Mac:
 `~/.local/share/jevcli/jevcli`, linked from `~/.local/bin/jevcli`.
@@ -45,6 +45,11 @@ a row (`stop_hook_active`), fails open. `jevcli hook review` pairs verdicts with
 same (0.93 same), extract --kind date (due date, confidence 1.00), pick-func (refund_payment, 1.00), find (exactly the
 two failure lines), verify, rank, tree, score, route (act/confirm/escalate, exit 0/10/20), samples (agreement), run.
 A small personal model answered several of these wrongly: the recipes are only as good as the model behind the profile.
+
+## Skill-first surface (v0.2.0, 2026-09-27)
+The skill is the product and the site sells the skill. The CLI teaches three verbs: `is` (P, exit 0/1), `which` (a key)
+and `ask` (JSONL over `--in` / `--lines` / `--states`, with `--is` / `--which` / `--score`), plus `judge`. The older names
+(query, feels, match, recipes, `ask --option`) still work but are undocumented in the skill.
 
 ## Fuzzy control flow + batch (done 2026-09-27, verified on hosted Jev)
 - `jevcli feels ADJ|QUESTION < text`: an if statement, exit 0/1 (outage 0.98 -> 0, newsletter 0.06 -> 1).

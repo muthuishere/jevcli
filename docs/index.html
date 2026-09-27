@@ -3,64 +3,99 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>jevcli</title>
-<meta name="description" content="A fuzzy if, switch and classifier for your shell and your coding agents, on any Jev-like (System One) decision model.">
+<title>jevcli: the judgement skill for coding agents</title>
+<meta name="description" content="An agent skill for Claude Code, Codex and any agent: fast yes/no, pick-one and 0-1 judgements from a Jev-style decision model, so your agent stops burning tokens on small decisions.">
 <style>
-:root { --bg:#fbfaf7; --fg:#1d1c1a; --mute:#6b6760; --line:#e4e0d8; --code:#f1eee7; --accent:#b4441f; }
-@media (prefers-color-scheme: dark) { :root { --bg:#141312; --fg:#ece9e3; --mute:#9b968d; --line:#2c2a27; --code:#1d1c1a; --accent:#ec7a52; } }
+:root { --bg:#fbfaf7; --fg:#1d1c1a; --mute:#6b6760; --line:#e4e0d8; --card:#ffffff; --code:#f3f0e9; --accent:#b4441f; --ok:#2f7d4f; }
+@media (prefers-color-scheme: dark) { :root { --bg:#131211; --fg:#ece9e3; --mute:#9b968d; --line:#2c2a27; --card:#1a1917; --code:#201e1c; --accent:#ec7a52; --ok:#6cc08f; } }
 * { box-sizing: border-box; }
-body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.6 ui-sans-serif, system-ui, -apple-system, sans-serif; }
-main { max-width: 760px; margin: 0 auto; padding: 56px 16px 80px; }
-h1 { font-size: 2.4rem; margin: 0 0 4px; letter-spacing: -0.02em; }
-h2 { font-size: 1.1rem; margin: 44px 0 10px; }
-p.lead { font-size: 1.15rem; color: var(--mute); margin: 0 0 28px; }
-pre { background: var(--code); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; overflow-x: auto; font: 14px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; }
-code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .92em; }
-.c { color: var(--mute); }
-.k { color: var(--accent); }
+body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width: 820px; margin: 0 auto; padding: 64px 16px 88px; }
+.eyebrow { color: var(--accent); font-weight: 600; font-size: .85rem; letter-spacing: .08em; text-transform: uppercase; }
+h1 { font-size: clamp(2rem, 5vw, 3rem); line-height: 1.1; margin: 10px 0 14px; letter-spacing: -0.025em; }
+h2 { font-size: 1.3rem; margin: 64px 0 8px; letter-spacing: -0.01em; }
+.lead { font-size: 1.2rem; color: var(--mute); margin: 0 0 30px; max-width: 640px; }
+pre { background: var(--code); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; overflow-x: auto; font: 14px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; margin: 12px 0; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .9em; }
+.c { color: var(--mute); } .k { color: var(--accent); } .o { color: var(--ok); }
+.agents { display:flex; flex-wrap:wrap; gap:8px; margin: 18px 0 0; }
+.agents span { border:1px solid var(--line); border-radius:999px; padding:3px 12px; font-size:.88rem; color:var(--mute); }
+.chat { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; margin: 16px 0; }
+.chat p { margin: 0 0 10px; }
+.who { font-size: .78rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--mute); margin-bottom: 4px !important; }
+.grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; margin-top: 16px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; }
+.card b { display:block; margin-bottom: 4px; }
+.card p { margin: 0; color: var(--mute); font-size: .95rem; }
+table { width:100%; border-collapse: collapse; font-size: .95rem; margin-top: 12px; }
+td { border-top: 1px solid var(--line); padding: 10px 8px 10px 0; vertical-align: top; }
+td:first-child { color: var(--mute); width: 42%; }
 a { color: var(--accent); }
-ul { padding-left: 20px; }
-footer { margin-top: 56px; color: var(--mute); font-size: .9rem; border-top: 1px solid var(--line); padding-top: 16px; }
+footer { margin-top: 72px; color: var(--mute); font-size: .9rem; border-top: 1px solid var(--line); padding-top: 18px; }
 </style>
 </head>
 <body>
 <main>
-<h1>jevcli</h1>
-<p class="lead">A fuzzy <code>if</code>, <code>switch</code> and classifier for your shell and your coding agents, on any Jev-like (System One) decision model. Each call takes about 0.4 s, and batches run in parallel.</p>
+<div class="eyebrow">An agent skill</div>
+<h1>Give your coding agent a gut feeling.</h1>
+<p class="lead">The jevcli skill lets Claude Code, Codex or any agent hand small judgements to a decision model: <em>is this urgent, which bucket, same customer, is this line an error</em>. Each one comes back in about 0.4 s as a number or a key, so the agent saves its own reasoning for the real work.</p>
+<pre><span class="c"># one line installs the skill in every agent on this machine</span>
+curl -fsSL https://muthuishere.github.io/jevcli/install.sh | sh</pre>
+<div class="agents"><span>Claude Code</span><span>Codex</span><span>~/.agents (any agent)</span><span>macOS · Linux · Windows</span></div>
+
+<h2>What it looks like inside your agent <span class="c" style="font-weight:400;font-size:.9rem">(an example session)</span></h2>
+<div class="chat">
+  <p class="who">You</p>
+  <p>Go through last night's app.log and fix whatever broke.</p>
+</div>
+<div class="chat">
+  <p class="who">Agent, using the jevcli skill</p>
+  <pre>jevcli ask --lines app.log --is fail="Is this line a failure an on-call engineer would act on?" --parallel 8 \
+  | jq -c 'select(.answers.fail.noul > .8)'</pre>
+  <p>jevcli flagged <b>2 of 4,812 lines</b> (P &gt; 0.8): the payment gateway timeout at 02:14 and <code>db connection refused</code> at 02:15. Both come from the pool size change in <code>db.go</code>; the fix and a test are below.</p>
+</div>
+<p class="c">The agent didn't read 4,812 lines. It asked one question in parallel, then worked on the two lines that mattered.</p>
+
+<h2>Three calls the skill teaches</h2>
+<div class="grid">
+  <div class="card"><b><code>is</code></b><p>A yes/no. It prints P(yes) and exits 0 or 1, so it drops into an <code>if</code>.</p></div>
+  <div class="card"><b><code>which</code></b><p>Pick one of your options. It prints the key, so it drops into a <code>case</code>.</p></div>
+  <div class="card"><b><code>ask</code></b><p>Many questions over many lines or JSON records, in parallel, one JSON line per input.</p></div>
+</div>
+<pre><span class="k">if</span> jevcli is "Is this urgent?" &lt; email.txt; <span class="k">then</span> ...; <span class="k">fi</span>                   <span class="o"># 0.98</span>
+jevcli which --in "I was charged twice" bug="a defect" billing="about money"   <span class="o"># billing</span>
+jevcli ask --lines app.log --is error="Is this an error?" --parallel 8      <span class="o"># JSONL, in input order</span></pre>
+
+<h2>When the agent reaches for it</h2>
+<table>
+<tr><td>Triage a log, inbox or ticket queue</td><td><code>ask --lines</code> with one yes/no, then act on the lines above 0.8</td></tr>
+<tr><td>Sort items into buckets</td><td><code>ask --states t.jsonl --which team="…|web=…;api=…"</code></td></tr>
+<tr><td>Dedupe records</td><td><code>is "Are A and B the same customer?"</code></td></tr>
+<tr><td>Check a claim against a source</td><td><code>is "Does the text say payment is due in October?"</code></td></tr>
+<tr><td>Rank search results</td><td><code>ask --lines results.txt --is hit="Does this answer …?"</code>, then sort by score</td></tr>
+<tr><td>About to ask you "A or B?"</td><td><code>which</code> first; the agent asks only when confidence is below 0.6</td></tr>
+<tr><td>About to hand back a turn</td><td><code>judge</code>: would you accept this, or did it stop short?</td></tr>
+</table>
+
+<h2>Built so the agent can trust it</h2>
+<div class="grid">
+  <div class="card"><b>Numbers, not prose</b><p>Every answer is a probability, a key or a level. The skill tells the agent to act only above 0.8 (or below 0.2) and to check anything in between.</p></div>
+  <div class="card"><b>Fast enough to fan out</b><p>20 tickets take 8.2 s one at a time and 1.5 s with <code>--parallel 8</code>.</p></div>
+  <div class="card"><b>Any Jev-like endpoint</b><p>Hosted Jev, a self-hosted model or your own. Keys stay in environment variables and are never written to disk.</p></div>
+  <div class="card"><b>Hooks off by default</b><p>An optional Claude Code Stop hook scores each turn. It stays off until you run <code>jevcli hook enable stop</code>.</p></div>
+</div>
 
 <h2>Install</h2>
 <pre><span class="c"># macOS / Linux</span>
 curl -fsSL https://muthuishere.github.io/jevcli/install.sh | sh
+<span class="c"># Windows</span>
+curl -fsSLo install.cmd https://muthuishere.github.io/jevcli/install.cmd &amp;&amp; install.cmd
 
-<span class="c"># Windows (cmd)</span>
-curl -fsSLo install.cmd https://muthuishere.github.io/jevcli/install.cmd &amp;&amp; install.cmd</pre>
-<p>The installer puts the binary on your PATH, installs the agent skill in <code>~/.claude/skills</code> and <code>~/.agents/skills</code> (and <code>~/.codex/skills</code> if that folder exists), and adds a Claude Code Stop-hook template that stays <b>off</b> until you run <code>jevcli hook enable stop</code>. Set <code>JEVCLI_NO_HOOK=1</code> to install the skills only, or <code>JEVCLI_VERSION=v0.1.0</code> to pin a version.</p>
-<pre>jevcli profile add jev https://your-endpoint/v1/systemone --model MODEL --header "Authorization: Bearer $YOUR_KEY_VAR"</pre>
+<span class="c"># point it at your endpoint (the key stays in your environment)</span>
+jevcli profile add jev https://your-endpoint/v1/systemone --model MODEL --header "Authorization: Bearer $YOUR_KEY_VAR"</pre>
+<p>This installs the skill in <code>~/.claude/skills</code> and <code>~/.agents/skills</code> (plus <code>~/.codex/skills</code> if that folder exists), along with the small <code>jevcli</code> binary the skill calls. Read the skill itself: <a href="skill.md">skill.md</a>.</p>
 
-<h2>If, switch, while</h2>
-<pre><span class="k">if</span> jevcli feels urgent &lt; email.txt; <span class="k">then</span> claude -p "Draft a reply" &lt; email.txt; <span class="k">fi</span>
-
-<span class="k">case</span> $(jevcli match billing="about money" bug="a defect" other="anything else" &lt; msg.txt) <span class="k">in</span>
-  billing) ... ;;  bug) ... ;;
-<span class="k">esac</span>
-
-<span class="k">while</span> ! jevcli feels "Is the build green?" --input @status.txt -q; <span class="k">do</span> sleep 30; <span class="k">done</span></pre>
-
-<h2>Many at once</h2>
-<pre>jevcli query --states tickets.jsonl --parallel 8 --noul urgent="Is this urgent?" \
-  | jq -c 'select(.answers.urgent.noul &gt; .7)'
-<span class="c"># 20 tickets: 8.2 s one at a time, 1.5 s at --parallel 8</span></pre>
-
-<h2>Recipes</h2>
-<ul>
-<li><code>verify</code> checks whether a source supports a claim or citation. <code>same</code> checks whether two records are the same entity, for deduping.</li>
-<li><code>rank</code> re-ranks search results. <code>find</code> is a semantic grep. <code>extract</code> pulls a date, amount, email or URL from text.</li>
-<li><code>score</code> rates on your own levels. <code>tree</code> classifies down a taxonomy. <code>pick-func</code> and <code>pick-skill</code> choose the function to call or the skill to load.</li>
-<li><code>ask --route</code> returns act, confirm or escalate, and <code>--samples</code> repeats the question to check agreement. <code>judge</code> checks whether you would accept an agent's turn.</li>
-</ul>
-<p>The full cookbook with real outputs is at <a href="cookbook.md">cookbook.md</a>, or run <code>jevcli cookbook</code>.</p>
-
-<footer>Jev judges; it does not write. Pair it with any LLM for the text. It works with the hosted Jev, a self-hosted model, or your own.</footer>
+<footer>jevcli judges; it does not write. Your agent still writes the code and the reply, and now spends less effort on the small calls. <a href="https://github.com/muthuishere/jevcli">Source on GitHub</a></footer>
 </main>
 </body>
 </html>

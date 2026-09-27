@@ -288,6 +288,7 @@ func cmdInstall(args []string) {
 	if !*noSkill {
 		for _, d := range skillDirs() {
 			dst := filepath.Join(d, "jevcli")
+			_ = os.RemoveAll(dst) // a reinstall leaves no stale files from an older skill
 			err := iofs.WalkDir(skillFS, "skill", func(p string, e iofs.DirEntry, _ error) error {
 				out := filepath.Join(dst, strings.TrimPrefix(strings.TrimPrefix(p, "skill"), "/"))
 				if e.IsDir() {
@@ -590,13 +591,21 @@ func cmdConfig(args []string) {
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: jevcli ask|judge|install|uninstall|hook|config  (see the header of cmd/jevcli/main.go)")
+		fmt.Fprintln(os.Stderr, "usage: jevcli is|which|ask|judge|profile|install|uninstall|hook|skill|version")
 		os.Exit(2)
 	}
 	a := os.Args[2:]
 	switch os.Args[1] {
 	case "ask":
-		cmdAsk(a)
+		if hasAny(a, "--option", "-option", "--true", "--route", "--samples") { // the older options form
+			cmdAsk(a)
+		} else {
+			cmdQuery(a)
+		}
+	case "is":
+		recipe("feels", a)
+	case "which":
+		recipe("match", a)
 	case "judge":
 		cmdJudge(a)
 	case "install":
@@ -609,8 +618,8 @@ func main() {
 		cmdConfig(a)
 	case "version", "--version", "-v":
 		pr("jevcli %s", version)
-	case "cookbook":
-		b, _ := skillFS.ReadFile("skill/references/cookbook.md")
+	case "skill", "cookbook":
+		b, _ := skillFS.ReadFile("skill/SKILL.md")
 		os.Stdout.Write(b)
 	case "query", "q":
 		cmdQuery(a)
@@ -706,6 +715,9 @@ func keys[V any](m map[string]V) []string {
 
 // cmdQuery is the native System One call: one state (plain text or a JSON object, sent as its JSON text), many named
 // questions. It prints the answers the way the API returns them; --raw prints the whole response (model, usage, id).
+// batchIn holds --lines input, already turned into JSONL.
+var batchIn string
+
 func cmdQuery(args []string) {
 	fs := flag.NewFlagSet("query", flag.ExitOnError)
 	st, prof, raw := fs.String("state", "", "the state: text, a JSON object, @file or -"), fs.String("profile", "", "endpoint profile"), fs.Bool("raw", false, "print the full response")
@@ -715,7 +727,26 @@ func cmdQuery(args []string) {
 	fs.Var(&nouls, "noul", `NAME=INSTRUCTIONS (repeat); optional criteria: NAME="INSTR|true text|false text"`)
 	fs.Var(&choices, "choice", `NAME="INSTRUCTIONS|key=desc;key2=desc2" (repeat)`)
 	fs.Var(&scores, "score", `NAME="INSTRUCTIONS|level0;level1;level2" (repeat, lowest first)`)
+	fs.Var(&nouls, "is", `NAME="QUESTION" (repeat): a yes/no, answered as P(yes)`)
+	fs.Var(&choices, "which", `NAME="QUESTION|key=desc;key2=desc2" (repeat): pick one key`)
+	fs.StringVar(st, "in", "", "one input: text, a JSON object, @file or -")
+	linesF := fs.String("lines", "", "batch: a text file (or -), one input per line")
 	_ = fs.Parse(args)
+	if *linesF != "" {
+		in := *linesF
+		if in != "-" {
+			in = "@" + strings.TrimPrefix(in, "@")
+		}
+		var b strings.Builder
+		for _, l := range strings.Split(text(in), "\n") {
+			if strings.TrimSpace(l) != "" {
+				j, _ := json.Marshal(l)
+				b.Write(append(j, '\n'))
+			}
+		}
+		*states, *linesF = "-", ""
+		batchIn = b.String()
+	}
 	if (*st == "") == (*states == "") || len(nouls)+len(choices)+len(scores) == 0 && *qfile == "" {
 		die("usage: jevcli query --state TEXT|JSON|@file | --states FILE.jsonl  --noul NAME=INSTRUCTIONS [...] [--questions set.json]")
 	}
@@ -772,7 +803,16 @@ func cmdQuery(args []string) {
 		if in != "-" {
 			in = "@" + strings.TrimPrefix(in, "@")
 		}
+		if batchIn != "" {
+			queryBatch(name, p, batchIn, qs, *par)
+			return
+		}
 		queryBatch(name, p, text(in), qs, *par)
+		return
+	}
+	if !*raw {
+		j, _ := json.Marshal(text(*st))
+		queryBatch(name, p, string(j), qs, 1)
 		return
 	}
 	state, err := normState(text(*st))
@@ -817,6 +857,7 @@ func normState(s string) (string, error) {
 func queryBatch(name string, p core.Profile, in string, qs map[string]any, par int) {
 	type row struct {
 		Line    int                    `json:"line"`
+		Input   string                 `json:"input,omitempty"`
 		Model   any                    `json:"model,omitempty"`
 		Answers map[string]core.Answer `json:"answers,omitempty"`
 		Error   string                 `json:"error,omitempty"`
@@ -841,6 +882,7 @@ func queryBatch(name string, p core.Profile, in string, qs map[string]any, par i
 			if strings.HasPrefix(l, `"`) && json.Unmarshal([]byte(l), &s) == nil {
 				l = s
 			}
+			rows[i].Input = trunc(l, 120)
 			state, err := normState(l)
 			if err == nil {
 				rows[i].Answers, rows[i].Model, err = askManyErr(p, core.LoadConfig().WithContext(p, state), qs)
@@ -863,4 +905,15 @@ func queryBatch(name string, p core.Profile, in string, qs map[string]any, par i
 	if failed {
 		os.Exit(1)
 	}
+}
+
+func hasAny(args []string, flags ...string) bool {
+	for _, a := range args {
+		for _, f := range flags {
+			if a == f || strings.HasPrefix(a, f+"=") {
+				return true
+			}
+		}
+	}
+	return false
 }

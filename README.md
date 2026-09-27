@@ -1,8 +1,17 @@
 # jevcli
 
-A small, vendor-neutral CLI for **System One / Jev-style decision models**: models that read a state and answer typed
-questions (Noul = a probability, Choice = one of several options, Score = a level) instead of writing text. Point it at any
-compatible endpoint (hosted, self-hosted or a personal model) and use it from the shell or from coding agents.
+**An agent skill for Claude Code, Codex and any agent: fast judgements from a Jev-style decision model.** The agent hands
+small calls (is this urgent, which bucket, same customer, is this line an error) to a model that answers in about 0.4 s
+with a number or a key, and saves its own reasoning for the real work. The skill lives in
+[`cmd/jevcli/skill/SKILL.md`](cmd/jevcli/skill/SKILL.md). It calls a small, vendor-neutral CLI:
+
+```bash
+jevcli is "Is this urgent?" < email.txt                                   # P(yes), exit 0/1
+jevcli which --in "I was charged twice" bug="a defect" billing="about money"   # the key
+jevcli ask --lines app.log --is error="Is this an error?" --parallel 8     # JSONL, one line per input
+jevcli judge --request "..." --proposal "..."                             # would the user accept this turn?
+```
+Site: https://muthuishere.github.io/jevcli/
 
 ## Install
 ```bash
@@ -13,32 +22,17 @@ This installs the binary, puts the agent skill in `~/.claude/skills` and `~/.age
 present), and adds the Claude Code Stop-hook template, which stays disabled. `JEVCLI_NO_HOOK=1` installs the skills only.
 Releases are cut by pushing a `v*` tag (`.github/workflows/release.yml`). The site is `docs/`, published by `pages.yml`.
 
+## ask: many questions over many inputs
 ```bash
-jevcli config set-endpoint default https://your-endpoint/v1/systemone MODEL [KEY_ENV]
-jevcli ask "Which should the agent do next?" --context "..." --option "stop=Stop and report" --option "run=Go ahead"
-jevcli ask "The agent wants to force-push to main." --context "..." --true "The user allows it." --false "The user stops it."
-jevcli judge --request "the user's request" --proposal "the agent's final message" --action "Bash: go test ./..."
+jevcli ask --in '{"role": "Super Smash Bros teammate", "message": "go for the ledge"}' \
+  --is is_appropriate="Does the message contain inappropriate language?" --is helps="Does this help donkey kong win?"
+jevcli ask --states tickets.jsonl --parallel 8 --which team="Which team?|web=frontend;api=backend" --score sev="How severe?|low;mid;high"
 ```
-
-The native call, one state and many named questions, answered in one request:
-
-```bash
-jevcli query --state '{"role": "You are playing Super Smash Bros and receive messages from a teammate", "message": "go for the ledge"}' \
-  --noul is_appropriate="Does the message contain inappropriate language or topics?" \
-  --noul does_this_help="Does this help donkey kong win?" --raw
-# {"answers": {"does_this_help": {"noul": 0.75, ...}, "is_appropriate": {"noul": 0.06, ...}}, "model": "jev-1.13.0", "usage": {...}}
-```
-`--choice NAME="INSTRUCTIONS|key=desc;key2=desc"` and `--score NAME="INSTRUCTIONS|level0;level1"` mix in other types.
-
-### An if statement, a switch, and a batch
-```bash
-if jevcli feels urgent < email.txt; then claude -p "Draft a reply" < email.txt; fi   # exit 0 = yes, 1 = no
-case $(jevcli match billing="about money" bug="a defect report" other="anything else" < msg.txt) in
-  billing) ... ;; bug) ... ;; esac
-jevcli query --states tickets.jsonl --parallel 8 --noul urgent="Is this urgent?" | jq -c 'select(.answers.urgent.noul > .7)'
-```
-`--states` takes one JSON object or JSON string per line and prints one JSONL answer line per state, in input order
-(20 tickets: 8.2 s sequential, 1.5 s at `--parallel 8`). `--questions set.json` reuses a saved `{NAME: question}` set.
+Inputs come from `--in` (one; `--raw` prints the full response), `--lines FILE` (one per text line) or `--states FILE.jsonl`
+(one JSON object or string per line). The output is one JSON line per input, in input order. `--questions set.json` reuses
+a saved `{NAME: {type, instructions, criteria}}` set. 20 tickets take 8.2 s sequentially and 1.5 s at `--parallel 8`.
+`--noul`, `--choice` and `query` still work as older names, as do the recipes (`verify`, `same`, `rank`, `find`,
+`extract`, `score`, `tree`, `pick-func`, `pick-skill`, `run`) and `ask Q --option k=desc [--route] [--samples]`.
 
 The context lives in the question: the instructions and each option or criterion say whose decision it is and what is
 judged. `judge` asks four turn-level questions from a **question pack** (JSON). The built-in pack is neutral; a profile can

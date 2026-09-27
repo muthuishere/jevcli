@@ -324,7 +324,7 @@ func recipe(cmd string, args []string) {
 	case "feels":
 		// A shell if statement: `if jevcli feels urgent < email.txt; then ...`. Exit 0 = yes, 1 = no, 2 = error.
 		fs := flag.NewFlagSet(cmd, flag.ExitOnError)
-		in, prof, th := fs.String("input", "-", "the text: TEXT, @file or - (stdin)"), profileFlag(fs), fs.Float64("threshold", 0.5, "P(yes) needed to exit 0")
+		in, prof, th := fs.String("in", "-", "the input: TEXT, @file or - (stdin)"), profileFlag(fs), fs.Float64("threshold", 0.5, "P(yes) needed to exit 0")
 		quiet := fs.Bool("q", false, "print nothing, only the exit code")
 		adj, rest := firstPositional(args)
 		_ = fs.Parse(rest)
@@ -338,7 +338,7 @@ func recipe(cmd string, args []string) {
 		name, p := resolve(*prof)
 		a := ask(name, p, text(*in), map[string]any{"q": map[string]any{"type": "noul", "instructions": instr}})["q"]
 		if !*quiet {
-			fmt.Fprintf(os.Stderr, "%s: P %.2f (%s)\n", instr, a.P(), name)
+			pr("%.2f", a.P())
 		}
 		if a.P() < *th {
 			os.Exit(1)
@@ -347,7 +347,7 @@ func recipe(cmd string, args []string) {
 	case "match":
 		// A switch: `case $(jevcli match billing="about money" bug="a defect report" < msg) in billing) ...`.
 		fs := flag.NewFlagSet(cmd, flag.ExitOnError)
-		in, prof, instr := fs.String("input", "-", "the text: TEXT, @file or - (stdin)"), profileFlag(fs), fs.String("question", "Which description fits best?", "the question")
+		in, prof, instr := fs.String("in", "-", "the input: TEXT, @file or - (stdin)"), profileFlag(fs), fs.String("question", "Which description fits best?", "the question")
 		var arms []string
 		for len(args) > 0 && !strings.HasPrefix(args[0], "-") {
 			arms, args = append(arms, args[0]), args[1:]

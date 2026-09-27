@@ -1,72 +1,69 @@
 ---
 name: jevcli
-description: Ask a Jev-style decision model (any System One endpoint configured in jevcli) what the user would decide, before bothering them. Use when you are about to ask the user to pick between options, when you wonder whether the user would accept your turn as it is, or to check you did not stop short. Also the fast fuzzy if / switch / classifier for scripts and agents, against any Jev-like (System One) endpoint: triage, classify, route, dedupe, rank, semantic grep, extract, verify a claim, batch many items in parallel. Trigger: what would the user pick, feels, classify these, triage, is this urgent, would the user accept this, ask jev, decide like me, should I ask the user, what do you say.
+description: Fast yes/no, pick-one and 0-1 judgements from a Jev-style decision model (any System One endpoint), instead of reasoning them out yourself. Use when you must classify, filter, triage, route, dedupe, rank or check many items (files, lines, tickets, messages, records), when a branch in your work depends on meaning ("is this urgent", "which kind is it"), when you are about to ask the user to pick between options, and before handing back a turn. Trigger: is this X, which of these, triage, classify, filter these, rank these, would the user accept this, what would the user pick, ask jev.
 ---
 
-# jevcli: ask a decision model before asking the user
+# jevcli: judgements in milliseconds
 
-`jevcli` asks a Jev-style decision model over the System One API. It **judges and chooses**; it never writes text, so
-give it options, a yes/no, or a turn to judge. Put the context in the question itself: the instructions and each
-option / criterion say whose decision it is and what is being judged; the model reads nothing else. Endpoints are profiles (`jevcli config show`); use `--profile NAME` to pick
-one, otherwise the default profile is used.
+jevcli sends a question to a decision model and gets back a **number or a key, never prose**. One call takes about 0.4 s,
+and a batch runs in parallel. Use it where you would otherwise spend your own tokens deciding something small: whether
+each of 200 log lines is an error, which team a ticket belongs to, whether two records are the same person.
+
+It only judges. You still write the code, the reply or the fix.
+
+## The three calls
+
+```bash
+jevcli is "Is this urgent?" < email.txt            # prints P(yes) e.g. 0.98; exit 0 if >= 0.5, else 1
+jevcli which bug="a software defect" billing="about money" other="anything else" < msg.txt   # prints the key
+jevcli ask --lines app.log --is error="Is this line an error?" --parallel 8                  # JSONL, one per line
+```
+
+- The input is **stdin**, or `--in @file`, or `--in "text"`.
+- `is` exits 0/1, so it works as an `if`. `which` prints one key, so it works in a `case`.
+- `ask` takes many questions over many inputs. `--lines FILE` makes one input per line, `--states FILE.jsonl` one per JSON
+  line, and `--in` gives a single input. Questions come from `--is NAME="Q"`, `--which NAME="Q|key=desc;key=desc"`,
+  `--score NAME="Q|low;mid;high"` or `--questions set.json`. The output is one JSON line per input, in input order:
+  `{"line":3,"input":"...","answers":{"error":{"noul":0.91}}}`.
+
+## When to reach for it
+
+| you are about to... | do this instead |
+|---|---|
+| read 300 lines to find the failures | `jevcli ask --lines log --is fail="Is this a failure?" \| jq 'select(.answers.fail.noul>.7)'` |
+| sort tickets or messages into buckets | `jevcli ask --states t.jsonl --which team="Which team?\|web=frontend;api=backend;ops=infra"` |
+| decide if two records are one entity | `printf 'A: %s\nB: %s' "$a" "$b" \| jevcli is "Are A and B the same customer?"` |
+| check a claim against a source | `jevcli is "Does the text say payment is due in October?" < invoice.txt` |
+| rank search results | `jevcli ask --lines results.txt --is hit="Does this answer: how do I get a refund?"`, then sort by `noul` |
+| ask the user "A or B?" | `jevcli which --in "<the facts>" a="<option A>" b="<option B>"`; ask only if confidence < 0.6 |
+| hand back your turn | `jevcli judge --request "<user's request>" --proposal "<your final message>"` (below) |
+
+**Write the question so it stands alone.** The model sees only the question and the input, not your conversation. Say
+whose decision it is and what counts as yes: "Would a senior on-call engineer page someone for this line?" works better
+than "bad?".
+
+**Trust rule.** Act on `is` when P ≥ 0.8 or ≤ 0.2, and on `which` when confidence ≥ 0.6 (printed on stderr). In between,
+treat the answer as a lean and check it yourself, or ask the user. When an answer changed what you did, say so in your
+report: "jevcli flagged 12 of 300 lines (P > 0.8)".
 
 ## Judge your own turn before handing back
 
 ```bash
-jevcli judge --request "<the user's request, verbatim>" --proposal "<your final message>" \
-  --action "Bash: go test ./..." --action "Edit src/app.py: <excerpt>"
+jevcli judge --request "<the user's request, verbatim>" --proposal "<your final message>" --action "Bash: go test ./..."
 ```
-Prints `accept`, `wanted more`, `reaction`, `satisfaction` (0-4).
-- `accept < 0.35`: the user would likely push back. Verify and show evidence (output, diff, test run).
-- `wanted more > 0.65`: you stopped short. Finish the missing part yourself unless it truly needs the user's decision.
+If `accept` < 0.35, the user would likely push back: verify and show evidence. If `wanted more` > 0.65, you stopped short:
+finish the missing part unless it truly needs the user.
 
-## "What would the user say?" before asking them
+## Setup (once)
 
 ```bash
-jevcli ask "<the decision as one question>" --context "<the facts the user would look at>" \
-  --option "stop=Stop and report, wait for the user" --option "run=Go ahead now"
-jevcli ask "<yes/no question>" --context "<facts>" --true "<what yes means>" --false "<what no means>"   # -> P(true)
+curl -fsSL https://muthuishere.github.io/jevcli/install.sh | sh      # installs this skill for Claude Code, Codex and ~/.agents
+jevcli profile add jev https://your-endpoint/v1/systemone --model MODEL --header "Authorization: Bearer $YOUR_KEY_VAR"
 ```
-**Trust rule**: act on a choice only if `confidence >= 0.6`; on a yes/no only if `P(yes) >= 0.8` or `<= 0.2`. Otherwise
-ask the user and include the lean in one line ("jevcli leans stop, 0.51"). When you act on it, say so in your report.
-
-## Fuzzy if / switch / batch (use these instead of reasoning it out yourself)
-Each is one fast call (~0.4 s), so branch on meaning in shell and fan out in parallel:
-```bash
-if jevcli feels urgent < email.txt; then ...; fi          # exit 0 yes, 1 no; --threshold 0.7; any question works too
-case $(jevcli match bug="a defect" billing="about money" other="anything else" < msg.txt) in bug) ...;; esac
-jevcli query --states items.jsonl --parallel 8 --questions set.json   # one JSONL answer line per state, input order
-```
-A states file has one JSON object or JSON string per line. A question set is `{"NAME": {"type": "noul"|"choice"|"score",
-"instructions": "...", "criteria": ...}}`. Use a batch to triage many files, tickets, or log lines at once, then act only
-on the lines that pass (for example `jq 'select(.answers.urgent.noul > .7)'`). A "while" is a shell loop around `feels`.
-
-## Cookbook recipes (all use the same profiles)
-Full cookbook with real outputs: `references/cookbook.md` (or `jevcli cookbook`). Read it when a task fits a recipe.
-
-| command | use it for |
-|---|---|
-| `jevcli query --state '{...}' --noul a="..." --noul b="..." [--choice n="I|k=d;k2=d"] [--raw]` | the native call: many named questions about one (JSON or text) state in one request |
-| `jevcli ask Q --option k=desc ... [--route 0.8,0.5] [--samples 5]` | classify / route; `--route` prints act, confirm or escalate (exit 0/10/20); `--samples` checks self-consistency |
-| `jevcli verify --claim TEXT --source @file` | is a claim or citation supported by the source |
-| `jevcli same --a TEXT --b TEXT --what "customer record"` | are two records the same entity (dedupe, alignment) |
-| `jevcli rank --query TEXT --candidates FILE [--dimension TEXT ...]` | re-rank search results; several dimensions = composite score |
-| `jevcli find QUERY FILE [--min 0.6]` | semantic grep, one question per line |
-| `jevcli extract --text @file --what "the due date" --kind date` | pick a value among candidates parsed from the text (date, number, money, email, url) |
-| `jevcli tree --text TEXT --taxonomy tax.json` | hierarchical classification, level by level |
-| `jevcli score --text TEXT --question Q --level L0 --level L1 ...` | ordinal rating |
-| `jevcli pick-skill TASK` / `jevcli pick-func REQUEST --functions f.json` | which skill to load / which function to call |
-| `jevcli run request.json` | any raw System One request (many questions for one state) |
-
-Profiles: `jevcli profile list | use NAME | add NAME URL --model M --header "Authorization: Bearer $VAR"`. `$VAR` is
-expanded at runtime in every profile field (url, model, headers, context, paths); a profile's `context` is prepended to
-every state it sends.
+If a call fails with "no url" or "needs $VAR", tell the user which profile or variable is missing. Do not guess one.
+`--profile NAME` picks a different endpoint for one call.
 
 ## Never
-- As a safety gate: permission prompts, the user's rules and money / legal / irreversible calls stay with the user.
-- Pasting secrets into `--context` / `--proposal` (jevcli redacts common key shapes; do not rely on it).
-- Using answers from a hosted third-party model as training data for another model, unless its terms allow it.
-
-## Hooks (off unless enabled)
-`jevcli install` adds a Stop-hook template that does nothing until `jevcli hook enable stop`. `jevcli hook status`;
-`jevcli hook mode shadow|block`; `jevcli hook review` lines logged verdicts up with what the user said next.
+- Use it as a safety gate. Permissions, money, legal and irreversible calls stay with the user.
+- Put secrets into `--in` or `--proposal`.
+- Train another model on answers from a hosted third-party endpoint unless its terms allow it.
