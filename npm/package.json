@@ -27,7 +27,8 @@
   "files": [
     "bin/jevx.js",
     "install.js",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "engines": {
     "node": ">=18"
