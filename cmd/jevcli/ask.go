@@ -246,7 +246,8 @@ func cmdAsk(args []string) {
 	minC := fs.Float64("min", -1, "override: choice / score confidence below is unsure")
 	par := fs.Int("parallel", 0, "override: concurrent requests in a batch")
 	var nouls, choices, scores, ctxs multi
-	fs.Var(&ctxs, "context", "background for this call: TEXT or @file (repeat); added after the config and profile context")
+	fs.Var(&ctxs, "context", "background for this call: TEXT or @file (repeat); added after the ## Jev sections")
+	fs.BoolVar(&core.NoContext, "no-context", false, "skip the ## Jev sections of the global and folder agent files")
 	fs.Var(&nouls, "noul", `NAME="QUESTION" (repeat); or NAME="QUESTION|true means|false means"`)
 	fs.Var(&choices, "choice", `NAME="QUESTION|key=desc;key2=desc" (repeat)`)
 	fs.Var(&scores, "score", `NAME="QUESTION|low;mid;high" (repeat, lowest first)`)
@@ -679,133 +680,37 @@ func cmdDefaults(args []string) {
 	pr("saved %s", core.ConfigPath())
 }
 
-// cmdContext manages the standing context sent with every call: global, or one profile's.
-//
-//	jevcli context [show]                       what is sent, and from where
-//	jevcli context set TEXT|@file [--profile P] @file stores the path (read at call time, so edits apply)
-//	jevcli context clear [--profile P]
+// cmdContext shows the context sent with every call and where each part comes from. jevcli never writes it: the user
+// edits the "## Jev" section of their own agent files by hand.
 func cmdContext(args []string) {
-	args, local := takeLocal(args)
-	if local {
-		localContext(args)
-		return
+	if len(args) > 0 && args[0] != "show" {
+		die("jevcli only reads context. Edit the \"## Jev\" section of your AGENTS.md / CLAUDE.md (global or in the repo); see: jevcli context")
 	}
 	cfg := core.LoadConfig()
-	prof := ""
-	var rest []string
-	for i := 0; i < len(args); i++ {
-		if args[i] == "--profile" && i+1 < len(args) {
-			prof, i = args[i+1], i+1
-			continue
+	sect := cfg.LocalSection()
+	show := func(label, body, from string) {
+		if body == "" {
+			pr("%-16s (none)  %s", label, from)
+			return
 		}
-		rest = append(rest, args[i])
+		pr("%-16s %s\n%-16s %s", label, trunc(strings.ReplaceAll(body, "\n", " "), 160), "", "from "+from)
 	}
-	ctx, file := &cfg.Context, &cfg.ContextFile
-	var p core.Profile
-	if prof != "" {
-		var ok bool
-		if p, ok = cfg.Profiles[prof]; !ok {
-			die("no profile %q", prof)
-		}
-		ctx, file = &p.Context, &p.ContextFile
+	g, gf := cfg.GlobalContext()
+	if gf == "" {
+		gf = "add a \"## " + sect + "\" section to one of: " + strings.Join(cfg.GlobalContextFiles(), ", ")
 	}
-	if len(rest) == 0 || rest[0] == "show" {
-		show := func(label, c, f string) {
-			if c == "" && f == "" {
-				pr("%-18s (none)", label)
-				return
-			}
-			if c != "" {
-				pr("%-18s %s", label, trunc(c, 200))
-			}
-			if f != "" {
-				pr("%-18s file %s", label, f)
-			}
-		}
-		show("global", cfg.Context, cfg.ContextFile)
-		if f := cfg.LocalContextFile(); f != "" {
-			if b, err := os.ReadFile(f); err == nil {
-				show("folder", strings.TrimSpace(string(b)), f)
-			}
-		}
-		for _, k := range keys(cfg.Profiles) {
-			if prof == "" || k == prof {
-				show("profile "+k, cfg.Profiles[k].Context, cfg.Profiles[k].ContextFile)
-			}
-		}
-		for _, k := range keys(cfg.Questions) {
-			if c := cfg.Questions[k].Context; c != "" && prof == "" {
-				show("question "+k, c, "")
-			}
-		}
-		return
+	show("global", g, gf)
+	l, lf := cfg.LocalContext()
+	if lf == "" {
+		lf = "add a \"## " + sect + "\" section to this repo's " + strings.Join(cfg.LocalContextFiles(), " or ")
 	}
-	switch rest[0] {
-	case "set":
-		if len(rest) < 2 {
-			die("usage: jevcli context set TEXT|@file [--profile P]")
+	show("folder", l, lf)
+	for _, k := range keys(allQuestions(cfg)) {
+		if c := allQuestions(cfg)[k].Context; c != "" {
+			show("question "+k, c, "its saved question")
 		}
-		v := strings.Join(rest[1:], " ")
-		if strings.HasPrefix(v, "@") {
-			*ctx, *file = "", v[1:]
-		} else {
-			*ctx, *file = v, ""
-		}
-	case "add":
-		if len(rest) < 2 {
-			die("usage: jevcli context add TEXT [--profile P]")
-		}
-		*ctx = strings.TrimSpace(strings.TrimSpace(*ctx) + "\n" + strings.Join(rest[1:], " "))
-	case "clear":
-		*ctx, *file = "", ""
-	default:
-		die("usage: jevcli context [show] | set TEXT|@file | add TEXT | clear  [--profile P | --local]")
 	}
-	if prof != "" {
-		cfg.Profiles[prof] = p
-	}
-	if err := core.SaveConfig(cfg); err != nil {
-		die("%v", err)
-	}
-	pr("saved %s", core.ConfigPath())
-}
-
-// localContext edits the folder context: the nearest jev.md (config local_context_file), else ./jev.md.
-//
-//	jevcli context set TEXT|@file --local    replace it (a file's content is copied in)
-//	jevcli context add TEXT --local          append a line
-//	jevcli context clear --local
-func localContext(args []string) {
-	if len(args) == 0 || args[0] == "show" {
-		cmdContext(nil)
-		return
-	}
-	cfg := core.LoadConfig()
-	path := cfg.LocalContextFile()
-	if path == "" {
-		wd, _ := os.Getwd()
-		path = filepath.Join(wd, cfg.LocalContextName())
-	}
-	switch args[0] {
-	case "set", "add":
-		if len(args) < 2 {
-			die("usage: jevcli context %s TEXT|@file --local", args[0])
-		}
-		v := strings.TrimSpace(text(strings.Join(args[1:], " ")))
-		if args[0] == "add" {
-			if old, err := os.ReadFile(path); err == nil && len(strings.TrimSpace(string(old))) > 0 {
-				v = strings.TrimSpace(string(old)) + "\n" + v
-			}
-		}
-		if err := os.WriteFile(path, []byte(v+"\n"), 0o644); err != nil {
-			die("%v", err)
-		}
-	case "clear":
-		_ = os.Remove(path)
-	default:
-		die("usage: jevcli context set TEXT|@file | add TEXT | clear  --local")
-	}
-	pr("saved %s", path)
+	pr("\norder sent: global, folder, then --context on the call; a saved question's own context goes with that question")
 }
 
 // cmdVerb is the shortcut layer: each verb is one question through cmdAsk, with the same config, context and settings.

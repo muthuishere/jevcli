@@ -35,11 +35,15 @@ One input prints `NAME VERDICT P` per question (`--json`, `--raw`) and exits 0 y
 batch prints JSONL in input order (20 tickets: 8.2 s sequentially, 1.5 s at 8 parallel).
 
 ## Context
-Folder: `jevcli context set|add TEXT --local` and `jevcli question add NAME ... --local` write `./jev.md` (context, found from any subfolder like CLAUDE.md; name set by `local_context_file`) and
-`./.jevcli/questions.json`; commit them with the repo. Global / profile: `jevcli context set TEXT|@file [--profile P]` (global or per profile; a file is re-read at call time), `jevcli context
-clear`, `jevcli context` (show). Per saved question: `question add NAME ... --context TEXT`. Per call: `ask|judge --context
-TEXT|@file` (repeatable). Order sent: global, folder, profile, call; a question's context goes ahead of its instructions. A JSON
-input keeps its shape: the context is merged into its `"context"` field.
+jevcli only reads context; you edit it. It sends, in order:
+1. The `## Jev` section of your global agent file (`~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, `~/.agents/AGENTS.md` or
+   `~/AGENTS.md`).
+2. The `## Jev` section of the nearest `AGENTS.md` / `CLAUDE.md` from the working directory up (`--cwd DIR` to choose).
+3. `--context TEXT|@file` on the call (repeatable).
+
+`--no-context` skips 1 and 2. `jevcli context` shows what is sent and from which file. A saved question can carry its own
+`--context`. A JSON input keeps its shape: the context is merged into its `"context"` field. The heading name and files
+are configurable (`local_context_section`, `local_context_file`, `global_context_file`).
 
 ## Settings
 `jevcli defaults [set|unset KEY VALUE] [--profile P]`: `yes` 0.8, `no` 0.2, `min_confidence` 0.6, `parallel` 8,

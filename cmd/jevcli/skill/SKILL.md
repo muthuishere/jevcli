@@ -53,19 +53,25 @@ jevcli ask --states tickets.jsonl team,sev --parallel 8                # batch o
 
 ## Context: what the model should know
 
-The model sees only the question and the input, so give it the background. The layers are sent in this order: global, folder, profile, question, call.
+The model sees only the question and the input, so give it the background. jevcli **reads** context and never writes it.
+The user keeps it by hand in a `## Jev` section of the agent files they already have:
+
+| layer | where | who edits |
+|---|---|---|
+| global | `## Jev` in `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, `~/.agents/AGENTS.md` or `~/AGENTS.md` (the first file that has one) | the user |
+| folder | `## Jev` in the nearest `AGENTS.md` or `CLAUDE.md` from the working directory up (like the agents find them) | the user |
+| call | `--context "TEXT"` or `--context @file` (repeatable) | you, per call |
 
 ```bash
-jevcli context set "We are a 5-person SaaS; on-call is one engineer."        # global, every call
-jevcli context set @~/notes/team.md --profile jev                            # one profile (a file is re-read each call)
-jevcli question add urgent --noul "Is this urgent?" --context "The reader is the CFO."   # one saved question
-jevcli ask urgent --context "The board meeting starts in 20 minutes." < msg.txt           # this call (TEXT or @file, repeatable)
-jevcli context set --local "This repo is a payments service."                # this folder: ./jev.md (like CLAUDE.md)
-jevcli context                                                                # show what is set, and where
+jevcli ask urgent --context "The board meeting starts in 20 minutes." < msg.txt
+jevcli is "Is this a critical bug?" --cwd ~/repos/payments < report.txt   # read that repo's ## Jev section
+jevcli is "Is this spam?" --no-context < msg.txt                          # skip the ## Jev sections for this call
+jevcli context                                                           # show what is sent, and from which file
 ```
 The same message scored 0.84 with no context, 0.94 with "the meeting is in 20 minutes" and 0.64 (unsure) with "the
-meeting is in three months". Pass the facts that decide it. A JSON input keeps its shape: the context goes into its
-`"context"` field.
+meeting is in three months". Pass the facts that decide it. Any heading level works, and so does "## Jev notes". The
+heading name and the files can be changed in config (`local_context_section`, `local_context_file`,
+`global_context_file`). If the context looks wrong, tell the user which file to edit. Do not edit it yourself.
 
 ## Save questions once, reuse everywhere
 
@@ -82,7 +88,8 @@ list` before writing a question inline: the user may already have one tuned.
 ## Everything is configurable, with defaults
 
 `jevcli defaults` shows every setting and where its value comes from. `jevcli defaults set KEY VALUE [--profile P]`
-changes one. The order of precedence is built-in < config < profile < the question's own thresholds < flags.
+changes one. The order of precedence is built-in < config < profile < the question's own thresholds < flags. Every command runs in the
+current directory unless you pass `--cwd DIR`.
 
 | key | default | meaning |
 |---|---|---|

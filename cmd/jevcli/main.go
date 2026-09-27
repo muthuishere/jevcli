@@ -66,6 +66,7 @@ func cmdJudge(args []string) {
 	var acts, ctxs multi
 	fs.Var(&acts, "action", "one tool call as a short line (repeat)")
 	fs.Var(&ctxs, "context", "background for this call: TEXT or @file (repeat)")
+	fs.BoolVar(&core.NoContext, "no-context", false, "skip the ## Jev sections of the global and folder agent files")
 	_ = fs.Parse(args)
 	if *reqT == "" || *prop == "" {
 		die("usage: jevcli judge --request TEXT --proposal TEXT [--action LINE ...]")
@@ -461,7 +462,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "usage: jevcli ask|is|pick|filter|rank|question|context|defaults|judge|profile|stats|install|uninstall|hook|skill|version")
 		os.Exit(2)
 	}
-	a := os.Args[2:]
+	a := takeCwd(os.Args[2:])
 	switch os.Args[1] {
 	case "ask", "a":
 		cmdAsk(a)
@@ -524,7 +525,7 @@ func cmdProfile(args []string) {
 	case "add":
 		need(3, "add NAME URL [--model M] [--header 'K: V' ...] [--questions FILE] [--context TEXT]")
 		fs := flag.NewFlagSet("profile add", flag.ExitOnError)
-		m, q, c := fs.String("model", "default", "model name"), fs.String("questions", "", "question pack JSON"), fs.String("context", "", "standing context for this profile")
+		m, q := fs.String("model", "default", "model name"), fs.String("questions", "", "question pack JSON")
 		var hdr multi
 		fs.Var(&hdr, "header", `request header "Name: value" (repeat); reference env vars for secrets: "Authorization: Bearer $JEV_API_KEY"`)
 		_ = fs.Parse(args[3:])
@@ -536,7 +537,7 @@ func cmdProfile(args []string) {
 			}
 			hm[strings.TrimSpace(k)] = strings.TrimSpace(v)
 		}
-		cfg.Profiles[args[1]] = core.Profile{URL: args[2], Model: *m, Headers: hm, Questions: *q, Context: *c}
+		cfg.Profiles[args[1]] = core.Profile{URL: args[2], Model: *m, Headers: hm, Questions: *q}
 		if ph, ok := cfg.Profiles["default"]; ok && ph.URL == "" && args[1] != "default" {
 			delete(cfg.Profiles, "default") // the seeded placeholder is replaced by the first real profile
 		}
@@ -624,4 +625,28 @@ func cmdStats(args []string) {
 		sort.Ints(a.ms)
 		pr("%-40s %6d %6d %10d %8d %8d", k, a.calls, a.errs, a.in, a.out, a.ms[len(a.ms)/2])
 	}
+}
+
+// takeCwd applies --cwd DIR (anywhere in the arguments) by changing into it, so the folder "## Jev" section and
+// relative paths resolve there; by default everything runs in the current directory.
+func takeCwd(args []string) []string {
+	var out []string
+	for i := 0; i < len(args); i++ {
+		v, ok := "", false
+		switch {
+		case (args[i] == "--cwd" || args[i] == "-cwd") && i+1 < len(args):
+			v, ok = args[i+1], true
+			i++
+		case strings.HasPrefix(args[i], "--cwd="):
+			v, ok = strings.TrimPrefix(args[i], "--cwd="), true
+		}
+		if ok {
+			if err := os.Chdir(v); err != nil {
+				die("--cwd: %v", err)
+			}
+			continue
+		}
+		out = append(out, args[i])
+	}
+	return out
 }

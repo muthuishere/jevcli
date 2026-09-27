@@ -46,8 +46,15 @@ same (0.93 same), extract --kind date (due date, confidence 1.00), pick-func (re
 two failure lines), verify, rank, tree, score, route (act/confirm/escalate, exit 0/10/20), samples (agreement), run.
 A small personal model answered several of these wrongly: the recipes are only as good as the model behind the profile.
 
+## Context is read-only (v0.7.0, 2026-09-27)
+Owner direction: the CLI never writes context. Sources: the `## Jev` section (any level, configurable name) of the global
+agent file (~/.claude/CLAUDE.md, ~/.codex/AGENTS.md, ~/.agents/AGENTS.md, ~/AGENTS.md; first with the section) and of the
+nearest AGENTS.md / CLAUDE.md from cwd up, then `--context` on the call. `--no-context` skips the sections; `--cwd DIR`
+on every command; the Stop hook chdirs to the session's cwd. Removed: `context set/add/clear`, `jev.md`, config and
+profile `context` fields. Live: a repo section moved "refund issued twice" from unsure 0.74 to yes 0.93.
+
 ## Folder context + shortcuts (v0.6.0, 2026-09-27)
-- `.jevcli/` (nearest from cwd up, like .git): `questions.json`; folder context is `./jev.md` (nearest up, config `local_context_file`); `--local` on `context set|add|clear` and
+- `.jevcli/` (nearest from cwd up, like .git): `questions.json`; folder context became the `## Jev` section in v0.7.0; `--local` on
   `question add|remove`. Order: global, folder, profile, question, call.
 - Shortcut verbs, all one question through cmdAsk (`cmdVerb` in ask.go): `is`, `pick`, `filter` (-v), `rank` (--top).
   Checked live in a nested folder: folder question crit -> yes 0.96; filter returned exactly the 2 failure lines.

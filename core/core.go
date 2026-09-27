@@ -72,16 +72,14 @@ func expand(p string) string {
 // Profile is one endpoint: url, model and request headers. Secrets are never stored: a header value names an env var
 // ("Bearer $JEV_API_KEY") that is expanded only when a request is sent.
 type Profile struct {
-	URL         string            `json:"url"`
-	Model       string            `json:"model"`
-	Headers     map[string]string `json:"headers,omitempty"`      // values may reference env vars ("Bearer $JEV_API_KEY"), expanded per request
-	Questions   string            `json:"questions,omitempty"`    // optional question pack (JSON) for a model trained on specific wording
-	Context     string            `json:"context,omitempty"`      // standing context prepended to every state sent to this profile
-	ContextFile string            `json:"context_file,omitempty"` // same, read from a file
-	Note        string            `json:"note,omitempty"`
-	Endpoint    string            `json:"endpoint,omitempty"` // legacy name for url
-	KeyEnv      string            `json:"key_env,omitempty"`  // legacy: same as headers {"Authorization": "Bearer $KEY_ENV"}
-	Defaults    Settings          `json:"defaults,omitempty"` // overrides the global defaults for this profile
+	URL       string            `json:"url"`
+	Model     string            `json:"model"`
+	Headers   map[string]string `json:"headers,omitempty"`   // values may reference env vars ("Bearer $JEV_API_KEY"), expanded per request
+	Questions string            `json:"questions,omitempty"` // optional question pack (JSON) for a model trained on specific wording
+	Note      string            `json:"note,omitempty"`
+	Endpoint  string            `json:"endpoint,omitempty"` // legacy name for url
+	KeyEnv    string            `json:"key_env,omitempty"`  // legacy: same as headers {"Authorization": "Bearer $KEY_ENV"}
+	Defaults  Settings          `json:"defaults,omitempty"` // overrides the global defaults for this profile
 }
 
 // Settings are every tunable knob. Unset fields fall back: flag > profile defaults > config defaults > Builtin.
@@ -194,14 +192,14 @@ type HookCfg struct {
 }
 
 type Config struct {
-	Default     string              `json:"default_profile"`
-	Context     string              `json:"context,omitempty"` // standing context for every profile (before the profile's own)
-	ContextFile string              `json:"context_file,omitempty"`
-	Profiles    map[string]Profile  `json:"profiles"`
-	Hooks       map[string]HookCfg  `json:"hooks"`
-	Defaults    Settings            `json:"defaults,omitempty"`
-	Questions   map[string]Question `json:"questions,omitempty"`          // named questions: jevcli ask NAME
-	LocalFile   string              `json:"local_context_file,omitempty"` // folder context file name (default jev.md)
+	Default    string              `json:"default_profile"`
+	Profiles   map[string]Profile  `json:"profiles"`
+	Hooks      map[string]HookCfg  `json:"hooks"`
+	Defaults   Settings            `json:"defaults,omitempty"`
+	Questions  map[string]Question `json:"questions,omitempty"`             // named questions: jevcli ask NAME
+	LocalFile  string              `json:"local_context_file,omitempty"`    // file holding the folder section (default AGENTS.md, then CLAUDE.md)
+	LocalSect  string              `json:"local_context_section,omitempty"` // the section heading, global and folder (default "Jev"; any level)
+	GlobalFile string              `json:"global_context_file,omitempty"`   // global files holding the section (comma list; default below)
 }
 
 func Home() string { h, _ := os.UserHomeDir(); return h }
@@ -296,32 +294,129 @@ func LocalDir() string {
 	}
 }
 
-// LocalContextName is the folder context file name: config local_context_file, else jev.md.
-func (c Config) LocalContextName() string {
-	if c.LocalFile != "" {
-		return c.LocalFile
+// LocalSection is the heading of the folder context section: config local_context_section, else "Jev".
+func (c Config) LocalSection() string {
+	if c.LocalSect != "" {
+		return c.LocalSect
 	}
-	return "jev.md"
+	return "Jev"
 }
 
-// LocalContextFile is the nearest folder context file (jev.md by default) from the working directory up, or "".
-// Like CLAUDE.md, it sits in the folder itself and applies to every call made there or below.
-func (c Config) LocalContextFile() string {
+// GlobalContextFiles are the user's global agent instruction files searched for the section, first match wins:
+// config global_context_file (comma list, ~ expanded), else $CLAUDE_CONFIG_DIR/CLAUDE.md, ~/.claude/CLAUDE.md,
+// ~/.codex/AGENTS.md, ~/.agents/AGENTS.md, ~/AGENTS.md.
+func (c Config) GlobalContextFiles() []string {
+	var out []string
+	for _, f := range strings.Split(c.GlobalFile, ",") {
+		if f = strings.TrimSpace(f); f != "" {
+			out = append(out, expand(f))
+		}
+	}
+	if len(out) > 0 {
+		return out
+	}
+	h := Home()
+	if d := os.Getenv("CLAUDE_CONFIG_DIR"); d != "" {
+		out = append(out, filepath.Join(d, "CLAUDE.md"))
+	}
+	return append(out, filepath.Join(h, ".claude/CLAUDE.md"), filepath.Join(h, ".codex/AGENTS.md"),
+		filepath.Join(h, ".agents/AGENTS.md"), filepath.Join(h, "AGENTS.md"))
+}
+
+// GlobalContext is the section from the first global agent file that has one: its text and the file.
+func (c Config) GlobalContext() (string, string) {
+	for _, f := range c.GlobalContextFiles() {
+		if b, err := os.ReadFile(f); err == nil {
+			if sec, ok := Section(string(b), c.LocalSection()); ok {
+				return sec, f
+			}
+		}
+	}
+	return "", ""
+}
+
+// LocalContextFiles are the files searched for a "## Jev" section: config local_context_file, else AGENTS.md then
+// CLAUDE.md.
+func (c Config) LocalContextFiles() []string {
+	var out []string
+	for _, f := range strings.Split(c.LocalFile, ",") { // "AGENTS.md,CLAUDE.md,GEMINI.md": first file with the section wins
+		if f = strings.TrimSpace(f); f != "" {
+			out = append(out, f)
+		}
+	}
+	if len(out) == 0 {
+		out = []string{"AGENTS.md", "CLAUDE.md"}
+	}
+	return out
+}
+
+// LocalContext is the folder context: the "## Jev" section of the nearest AGENTS.md / CLAUDE.md from the working
+// directory up (the home folder is skipped: that is global instructions, not a project). It returns the text and the file.
+func (c Config) LocalContext() (string, string) {
 	d, err := os.Getwd()
 	if err != nil {
-		return ""
+		return "", ""
 	}
 	for {
-		f := filepath.Join(d, c.LocalContextName())
-		if st, err := os.Stat(f); err == nil && !st.IsDir() && d != Home() {
-			return f
+		if d != Home() {
+			for _, n := range c.LocalContextFiles() {
+				f := filepath.Join(d, n)
+				if b, err := os.ReadFile(f); err == nil {
+					if sec, ok := Section(string(b), c.LocalSection()); ok {
+						return sec, f
+					}
+				}
+			}
 		}
 		up := filepath.Dir(d)
 		if up == d {
-			return ""
+			return "", ""
 		}
 		d = up
 	}
+}
+
+// heading matches a markdown heading whose text is name (any level from # to ######, any case; trailing words are
+// allowed, so "## Jev context" matches "Jev").
+func heading(line, name string) (level int, ok bool) {
+	t := strings.TrimSpace(line)
+	level = len(t) - len(strings.TrimLeft(t, "#"))
+	if level == 0 || level > 6 || !strings.HasPrefix(t[level:], " ") {
+		return 0, false
+	}
+	h, n := strings.Fields(strings.ToLower(t[level:])), strings.Fields(strings.ToLower(name))
+	if len(n) == 0 || len(h) < len(n) {
+		return 0, false
+	}
+	return level, strings.Join(h[:len(n)], " ") == strings.Join(n, " ")
+}
+
+// Section returns the body of the first section headed name: every line up to the next heading of the same or a higher
+// level (fenced code blocks are not mistaken for headings).
+func Section(md, name string) (string, bool) {
+	lines := strings.Split(md, "\n")
+	for i, l := range lines {
+		lv, ok := heading(l, name)
+		if !ok {
+			continue
+		}
+		var body []string
+		fence := false
+		for _, m := range lines[i+1:] {
+			if strings.HasPrefix(strings.TrimSpace(m), "```") {
+				fence = !fence
+			}
+			if !fence {
+				t := strings.TrimSpace(m)
+				if n := len(t) - len(strings.TrimLeft(t, "#")); n > 0 && n <= lv && strings.HasPrefix(t[n:], " ") {
+					break
+				}
+			}
+			body = append(body, m)
+		}
+		return strings.TrimSpace(strings.Join(body, "\n")), true
+	}
+	return "", false
 }
 
 // LocalQuestions are the named questions of the nearest .jevcli folder (they override global ones with the same name).
@@ -335,18 +430,16 @@ func LocalQuestions() map[string]Question {
 	return m
 }
 
+// NoContext skips the standing context (the global and folder "## Jev" sections) for this process: --no-context.
+var NoContext bool
+
+// WithContext puts the context in front of the state: the global section, the folder section, then the per-call extra.
 func (c Config) WithContext(p Profile, state string, extra ...string) string {
-	p = p.Expanded()
-	c.Context, c.ContextFile = os.ExpandEnv(c.Context), os.ExpandEnv(c.ContextFile)
 	var parts []string
-	local := c.LocalContextFile()
-	for _, pair := range [][2]string{{c.Context, c.ContextFile}, {"", local}, {p.Context, p.ContextFile}} {
-		if pair[0] != "" {
-			parts = append(parts, strings.TrimSpace(pair[0]))
-		}
-		if pair[1] != "" {
-			if b, err := os.ReadFile(expand(pair[1])); err == nil {
-				parts = append(parts, strings.TrimSpace(string(b)))
+	if !NoContext {
+		for _, get := range []func() (string, string){c.GlobalContext, c.LocalContext} {
+			if sec, _ := get(); strings.TrimSpace(sec) != "" {
+				parts = append(parts, strings.TrimSpace(sec))
 			}
 		}
 	}
@@ -390,7 +483,7 @@ var envRef = regexp.MustCompile(`\$\{?([A-Za-z_][A-Za-z0-9_]*)\}?`)
 
 // fields are every profile value that may hold $VAR references (expanded at runtime, stored raw).
 func (p Profile) fields() []string {
-	f := []string{p.URL, p.Model, p.Questions, p.Context, p.ContextFile}
+	f := []string{p.URL, p.Model, p.Questions}
 	for _, v := range p.Headers {
 		f = append(f, v)
 	}
@@ -413,7 +506,7 @@ func MissingEnv(p Profile) string {
 func (p Profile) Expanded() Profile {
 	p = p.Norm()
 	e := os.ExpandEnv
-	p.URL, p.Model, p.Questions, p.Context, p.ContextFile = e(p.URL), e(p.Model), e(p.Questions), e(p.Context), e(p.ContextFile)
+	p.URL, p.Model, p.Questions = e(p.URL), e(p.Model), e(p.Questions)
 	h := map[string]string{}
 	for k, v := range p.Headers {
 		h[k] = e(v)
@@ -831,6 +924,9 @@ func Verdict(cfg Config, h HookCfg, in HookInput) (logRec map[string]any, blockR
 	req, text, acts, ok := LastTurn(in.TranscriptPath)
 	if !ok {
 		return nil, ""
+	}
+	if in.Cwd != "" { // the session's folder, so its "## Jev" section is the one sent
+		_ = os.Chdir(in.Cwd)
 	}
 	if h.Gate != "all" {
 		if why := skipTurn(acts); why != "" { // decided locally, no call spent
