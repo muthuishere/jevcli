@@ -1,0 +1,38 @@
+{
+ "noul": {
+  "accepts": {
+   "instructions": "An agent made this proposal for the user's request.",
+   "true": "The user accepts it as it is and lets the work continue.",
+   "false": "The user corrects, redirects, rejects or stops it."
+  },
+  "wanted_more": {
+   "instructions": "An agent answered the user's request.",
+   "true": "The user wanted more: the answer stopped short, missed a part, or handed work back.",
+   "false": "The answer went as far as the user wanted."
+  }
+ },
+ "choice": {
+  "reaction": {
+   "instructions": "An agent made this proposal for the user's request. How does the user react?",
+   "options": {
+    "accept": "The user accepts it and the work continues.",
+    "accept_with_changes": "The user accepts it but asks for adjustments.",
+    "redirect": "The user points the agent in a different direction.",
+    "reject": "The user says it is wrong or not wanted.",
+    "stop": "The user interrupts or stops the agent."
+   }
+  }
+ },
+ "score": {
+  "satisfaction": {
+   "instructions": "An agent made this proposal for the user's request. How satisfied is the user?",
+   "levels": [
+    "The user is frustrated with it.",
+    "The user is unhappy with it.",
+    "The user is neutral about it.",
+    "The user is satisfied with it.",
+    "The user is delighted with it."
+   ]
+  }
+ }
+}
