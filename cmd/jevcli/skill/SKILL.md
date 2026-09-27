@@ -136,7 +136,7 @@ mode, logging what it would do; `mode NAME act` lets it act.
 
 ```bash
 jevcli plugin list                                  # what exists, enabled, mode
-jevcli plugin enable bash-guard                     # shadow: logs only
+jevcli plugin enable bash-guard                     # shadow: logs only   (enable all / disable all: every plugin at once)
 jevcli plugin mode bash-guard act                   # deny / ask for real
 jevcli plugin test bash-guard "git push --force"    # dry run on a sample command: answers + decision, nothing logged
 jevcli plugin log bash-guard 20                     # what it decided, with the answers

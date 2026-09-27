@@ -53,6 +53,13 @@ JSON, `Eval` is a tiny condition language, folder plugins in `.jevcli/plugins.js
 remote / irreversible / injection / complexity / kind in `core/questions.json`. v0.8 `hooks.stop` migrates to
 `stop-judge`. Live: bash-guard denied `rm -rf /` (destroys 0.91), allowed `ls -la`; route flagged a rename for a haiku
 sub-agent (complexity 0.19) and passed a multi-currency redesign (2.0).
+`plugin enable|disable all [--act]`. Every plugin JSON carries `"enabled"`.
+End-to-end (2026-09-27, ghostty-sendkeys driving a real `claude --dangerously-skip-permissions` in a scratch repo with
+project-level `.claude/settings.json` hooks + folder `.jevcli/plugins.json`): bash-guard (deny at 0.6) denied
+`rm -rf ./junk` (destroys 0.68), allowed `ls -la` (0.46), the file survived, and Claude reported "blocked by the jevcli
+bash-guard PreToolUse hook... I did not retry". With the shipped 0.8 line the same command only got `warn` (a permission
+prompt). `route` fired on every prompt (complexity 0-0.18, kind ops). Note: a UserPromptSubmit hook that fires on every
+prompt costs one call per prompt.
 Gap: Claude Code protocol only. Next: adapters for Cursor / Gemini CLI hooks; check Codex; `eval` on plugin logs.
 Ecosystem (Reddit/HN, 2026-09-27): praise = speed/cost, PreToolUse guard; complaints = hype, "just a classifier",
 made-up numbers, privacy of what is sent, no explanation with a yes/no, no threshold calibration.

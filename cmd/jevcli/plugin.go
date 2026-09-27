@@ -1,7 +1,7 @@
 package main
 
 // jevcli plugin: list | show NAME | add NAME --on EVENT[:Tool] --ask q1,q2 [--deny|--warn|--block|--context COND]
-//                [--say TEXT] [--exec CMD] [--desc TEXT] [--profile P] [--local] | remove | enable [--act] | disable |
+//                [--say TEXT] [--exec CMD] [--desc TEXT] [--profile P] [--local] | remove | enable NAME|all [--act] | disable NAME|all |
 //                mode NAME shadow|act | test NAME [--payload FILE] | log [NAME] [N]
 
 import (
@@ -83,6 +83,32 @@ func cmdPlugin(args []string) {
 		delete(target, name)
 		save()
 	case "enable", "disable":
+		if name == "all" { // one switch for every plugin, global and folder
+			on := args[0] == "enable"
+			for _, k := range keys(all) {
+				p := all[k]
+				p.Enabled = on
+				if on && contains(args, "--act") {
+					p.Mode = "act"
+				}
+				if _, isLocal := core.LocalPlugins()[k]; isLocal {
+					lp := core.LocalPlugins()
+					lp[k] = p
+					b, _ := json.MarshalIndent(lp, "", "  ")
+					_ = os.WriteFile(filepath.Join(localDir(), "plugins.json"), append(b, '\n'), 0o644)
+				} else {
+					cfg.Plugins[k] = p
+				}
+			}
+			if err := core.SaveConfig(cfg); err != nil {
+				die("%v", err)
+			}
+			pr("%d plugins %sd", len(all), args[0])
+			if on && len(core.InstalledEvents(core.SettingsPath())) == 0 {
+				pr("note: no hooks in %s yet: run `jevcli install --hooks`", core.SettingsPath())
+			}
+			return
+		}
 		p := need()
 		p.Enabled = args[0] == "enable"
 		if contains(args, "--act") {
