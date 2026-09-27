@@ -1,0 +1,59 @@
+---
+// SiteTitle override, as on cljgo: the site title plus the CURRENT RELEASE in the header of every page,
+// so a reader can tell which jevx a page describes. The version is hardcoded: bump it when a release is cut.
+import logo from '../assets/logo.svg';
+const VERSION = 'v0.10.0';
+const { siteTitle, siteTitleHref } = Astro.locals.starlightRoute;
+---
+
+<span class="site-title-wrap sl-flex">
+	<a href={siteTitleHref} class="site-title sl-flex">
+		<img src={logo.src} alt="" width="24" height="24" />
+		<span translate="no">{siteTitle}</span>
+	</a>
+	<a
+		class="version-badge"
+		href={`https://github.com/muthuishere/jevx/releases/tag/${VERSION}`}
+		title={`jevx ${VERSION}: release notes`}>{VERSION}</a
+	>
+</span>
+
+<style>
+	@layer starlight.core {
+		.site-title-wrap {
+			align-items: center;
+			gap: 0.5rem;
+			overflow: hidden;
+		}
+		.site-title {
+			align-items: center;
+			gap: 0.5rem;
+			font-weight: 600;
+			font-size: var(--sl-text-h4);
+			color: var(--sl-color-text-accent);
+			text-decoration: none;
+			white-space: nowrap;
+		}
+		.version-badge {
+			font-size: var(--sl-text-xs);
+			font-weight: 500;
+			line-height: 1;
+			padding: 0.2em 0.5em;
+			border: 1px solid var(--sl-color-gray-5);
+			border-radius: 999px;
+			color: var(--sl-color-gray-2);
+			text-decoration: none;
+			background: var(--sl-color-gray-6);
+			white-space: nowrap;
+		}
+		.version-badge:hover {
+			color: var(--sl-color-white);
+			border-color: var(--sl-color-gray-3);
+		}
+		@media (max-width: 30rem) {
+			.version-badge {
+				display: none;
+			}
+		}
+	}
+</style>

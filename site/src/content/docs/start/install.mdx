@@ -1,0 +1,78 @@
+---
+title: Install
+description: npm, one-line installers for macOS, Linux and Windows, what jevx install writes where, building from source, and how releases are cut.
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+## One line
+
+<Tabs syncKey="os">
+	<TabItem label="npm">
+		```bash
+		npm i -g @muthuishere/jevx
+		```
+		The package downloads the release binary for your OS and CPU from GitHub Releases, then runs `jevx install`. Node 18 or newer.
+	</TabItem>
+	<TabItem label="macOS / Linux">
+		```bash
+		curl -fsSL https://muthuishere.github.io/jevx/install.sh | sh
+		```
+	</TabItem>
+	<TabItem label="Windows">
+		```bat
+		curl -fsSLo install.cmd https://muthuishere.github.io/jevx/install.cmd && install.cmd
+		```
+	</TabItem>
+	<TabItem label="Go">
+		```bash
+		go install github.com/muthuishere/jevx/cmd/jevx@latest
+		jevx install
+		```
+	</TabItem>
+</Tabs>
+
+`install.sh` (POSIX sh) and `install.cmd` do the same four things: pick the asset for your OS and CPU (`jevx_darwin_arm64`, `jevx_linux_amd64`, `jevx_windows_arm64.exe`, …), download it from the latest GitHub release, put it on your PATH, and run `jevx install`.
+
+| variable | effect |
+| --- | --- |
+| `JEVX_VERSION=v0.9.0` | pin a release instead of latest (shell installers) |
+| `JEVX_BIN=DIR` | install the binary there (default `~/.local/bin`; Windows `%LOCALAPPDATA%\Programs\jevx`) |
+| `JEVX_NO_HOOK=1` | skills only, no Claude Code hook entries (all installers, npm included) |
+
+If a direct download fails and `gh` is installed, the shell script falls back to `gh release download`. It also tells you if the directory is not on your PATH.
+
+## What `jevx install` does
+
+```console
+$ jevx install -h
+Usage of install:
+  -hooks
+    	only the hook template
+  -no-hook
+    	skip the hook template
+  -no-skill
+    	skip the agent skill
+  -skills
+    	only the agent skill
+```
+
+- `--skills` writes `SKILL.md` into `~/.claude/skills/jevx`, `~/.agents/skills/jevx`, and `~/.codex/skills/jevx` if `~/.codex` exists.
+- `--hooks` adds one entry per plugin event to Claude Code's `settings.json`, each calling `jevx hook run EVENT`. The plugins stay disabled, so the entries are no-ops until `plugin enable`.
+- Neither flag: both. Re-running is idempotent.
+
+`jevx uninstall` takes the same flags and removes exactly what was written, leaving other skills and hooks alone.
+
+## From source
+
+```bash title="Terminal"
+git clone https://github.com/muthuishere/jevx && cd jevx
+go build -o bin/jevx ./cmd/jevx      # standard library only
+bin/jevx version                     # prints "jevx dev" for a local build
+```
+
+## Releases
+
+Pushing a `v*` tag runs `.github/workflows/release.yml`, which cross-compiles with `CGO_ENABLED=0` for darwin, linux and windows on amd64 and arm64, stamps the tag into `jevx version`, and attaches the six binaries to a GitHub release. The installers download from `releases/latest` by default; the npm package downloads the release matching its own version.
+
+This site is built from `site/` with Astro Starlight by `.github/workflows/pages.yml`. That workflow also copies `install.sh`, `install.cmd` and the skill (as `skill.md`) into the site root, which is why the install URLs above resolve.

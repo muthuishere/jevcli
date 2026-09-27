@@ -1,0 +1,216 @@
+/* ───────────────────────────────────────────────────────────────
+   jevx docs theme — adapted from the cljgo theme (same fonts, neutrals,
+   spacing, tables, FAQ cards) with the deemwar single blue accent used
+   by the toolnexus docs. Inter + JetBrains Mono.
+   ─────────────────────────────────────────────────────────────── */
+
+:root {
+	--sl-font: 'Inter Variable', 'Inter', system-ui, -apple-system, BlinkMacSystemFont,
+		'Segoe UI', Roboto, sans-serif;
+	--sl-font-mono: 'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, SFMono-Regular,
+		'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace;
+	/* Wider content column — the right-hand ToC is disabled site-wide. */
+	--sl-content-width: 60rem;
+	/* Accents, exposed for reuse below. */
+	--jevx-blue: #3478f6;
+	--jevx-green: #4ade80;
+}
+
+/* ── Dark theme (default): charcoal + deemwar blue ── */
+:root {
+	--sl-color-accent-low: #14284d;
+	--sl-color-accent: #3478f6;
+	--sl-color-accent-high: #b7ccff;
+
+	--sl-color-white: #f2f3f5;
+	--sl-color-gray-1: #e5e7eb;
+	--sl-color-gray-2: #c2c5cc;
+	--sl-color-gray-3: #a6a9b2;
+	--sl-color-gray-4: #71747d;
+	--sl-color-gray-5: #2a2c31;
+	--sl-color-gray-6: #17181c;
+	--sl-color-black: #121212;
+
+	--sl-color-bg: #121212;
+	--sl-color-bg-nav: #16171a;
+	--sl-color-bg-sidebar: #16171a;
+	--sl-color-bg-inline-code: #1c1e23;
+	--sl-color-hairline: #2a2c31;
+	--sl-color-hairline-light: #34373e;
+	--sl-color-text-accent: #6fa0ff;
+}
+
+/* ── Light theme: soft neutral + deeper blue ── */
+:root[data-theme='light'] {
+	--jevx-blue: #2563eb;
+	--jevx-green: #16a34a;
+
+	--sl-color-accent-low: #d3e0ff;
+	--sl-color-accent: #2563eb;
+	--sl-color-accent-high: #16306b;
+
+	--sl-color-white: #14161b;
+	--sl-color-gray-1: #24272f;
+	--sl-color-gray-2: #4c5059;
+	--sl-color-gray-3: #7c808a;
+	--sl-color-gray-4: #8b8e96;
+	--sl-color-gray-5: #d5d9df;
+	--sl-color-gray-6: #f3f5f7;
+	--sl-color-gray-7: #f6f7f9;
+	--sl-color-black: #ffffff;
+
+	--sl-color-bg: #f6f7f9;
+	--sl-color-bg-nav: #ffffff;
+	--sl-color-bg-sidebar: #ffffff;
+	--sl-color-bg-inline-code: #eaebef;
+	--sl-color-hairline: #e3e6ea;
+	--sl-color-hairline-light: #d5d9df;
+	--sl-color-text-accent: #2563eb;
+}
+
+/* Tighter, more confident headings . */
+.sl-markdown-content h1,
+.content-panel h1 {
+	letter-spacing: -0.02em;
+}
+
+/* Active tab picks up the accent. */
+starlight-tabs [role='tab'][aria-selected='true'] {
+	color: var(--sl-color-text-accent);
+	border-color: var(--sl-color-accent);
+}
+
+/* ── Wide markdown tables — fit more before scrolling, then scroll ── */
+.sl-markdown-content table {
+	display: block;
+	width: max-content;
+	max-width: 100%;
+	overflow-x: auto;
+	font-size: 0.85rem;
+}
+.sl-markdown-content table :is(th, td) {
+	padding-block: 0.4rem;
+	padding-inline: 0.6rem;
+}
+
+/* ── Feedback line under each page ── */
+.jevx-feedback {
+	margin-top: 3rem;
+	padding-top: 1.5rem;
+	border-top: 1px solid var(--sl-color-hairline);
+}
+.jevx-feedback p {
+	font-size: 0.85rem;
+	color: var(--sl-color-gray-3);
+	margin-bottom: 1rem;
+}
+
+/* ── FAQ accordion cards ── */
+details.faq {
+	border: 1px solid var(--sl-color-hairline);
+	border-radius: 0.5rem;
+	padding: 0;
+	margin-top: 0.75rem !important;
+	background: var(--sl-color-bg-nav);
+	overflow: hidden;
+}
+details.faq > summary {
+	cursor: pointer;
+	list-style: none;
+	padding: 0.85rem 1rem;
+	font-weight: 600;
+	color: var(--sl-color-white);
+	position: relative;
+	padding-right: 2.25rem;
+}
+details.faq > summary::-webkit-details-marker {
+	display: none;
+}
+details.faq > summary::after {
+	content: '+';
+	position: absolute;
+	right: 1rem;
+	top: 50%;
+	transform: translateY(-50%);
+	font-weight: 400;
+	font-size: 1.2rem;
+	color: var(--sl-color-gray-3);
+}
+details.faq[open] > summary::after {
+	content: '−';
+}
+details.faq[open] > summary {
+	border-bottom: 1px solid var(--sl-color-hairline);
+}
+details.faq > :not(summary) {
+	margin-inline: 1rem;
+}
+details.faq > p:last-child {
+	margin-bottom: 1rem;
+}
+details.faq > summary:hover {
+	color: var(--sl-color-accent-high);
+}
+
+/* ── Landing page (splash) ── */
+.jevx-pill {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.5rem;
+	padding: 0.3rem 0.8rem;
+	border: 1px solid var(--sl-color-hairline-light);
+	border-radius: 999px;
+	font-size: var(--sl-text-sm);
+	color: var(--sl-color-gray-2);
+	background: var(--sl-color-bg-nav);
+}
+.jevx-pill .live {
+	width: 0.5rem;
+	height: 0.5rem;
+	border-radius: 50%;
+	background: var(--jevx-green);
+}
+.hero h1 {
+	letter-spacing: -0.03em;
+}
+.jevx-lead {
+	font-size: var(--sl-text-lg);
+	color: var(--sl-color-gray-2);
+	max-width: 44rem;
+}
+.jevx-eyebrow {
+	display: block;
+	font-size: var(--sl-text-xs);
+	font-weight: 600;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--sl-color-text-accent);
+	margin-top: 3rem;
+}
+.jevx-eyebrow + h2 {
+	margin-top: 0.25rem !important;
+}
+.jevx-not {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+	gap: 0.75rem;
+	padding: 0;
+	list-style: none;
+}
+.jevx-not li {
+	margin: 0 !important;
+	padding: 0.85rem 1rem;
+	border: 1px solid var(--sl-color-hairline);
+	border-radius: 0.5rem;
+	background: var(--sl-color-bg-nav);
+	font-size: var(--sl-text-sm);
+	color: var(--sl-color-gray-2);
+}
+.jevx-not li strong {
+	display: block;
+	color: var(--sl-color-white);
+	margin-bottom: 0.2rem;
+}
+
+/* Show operators as typed: conditions like "destroys >= 0.8" must not render as ligatures. */
+code, pre, kbd, .expressive-code, .expressive-code * { font-variant-ligatures: none; font-feature-settings: "liga" 0, "calt" 0; }

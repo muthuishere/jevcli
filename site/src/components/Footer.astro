@@ -1,0 +1,14 @@
+---
+// Default Starlight footer (edit link, pagination) plus a feedback line, as on cljgo.
+// cljgo mounts giscus here; jevx has no Discussions category wired yet, so it links to issues instead.
+import Default from '@astrojs/starlight/components/Footer.astro';
+---
+
+<Default><slot /></Default>
+
+<div class="jevx-feedback">
+	<p>
+		Something wrong or unclear on this page?
+		<a href="https://github.com/muthuishere/jevx/issues/new">Open an issue on GitHub</a>.
+	</p>
+</div>

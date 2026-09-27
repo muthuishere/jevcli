@@ -1,0 +1,118 @@
+---
+title: jevx
+description: Typed judgements for coding agents. Hand small decisions to a Jev-style decision model and get back a verdict with a probability, not prose.
+template: splash
+hero:
+  title: Typed judgements for coding agents.
+  tagline: Hand small decisions (is this urgent, which team, is this line an error) to a Jev-style decision model and get back a verdict with a probability, not prose.
+  actions:
+    - text: Get started
+      link: /jevx/start/getting-started/
+      icon: right-arrow
+    - text: Read the docs
+      link: /jevx/start/introduction/
+      variant: secondary
+    - text: View on GitHub
+      link: https://github.com/muthuishere/jevx
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+<span class="jevx-pill"><span class="live"></span> CLI + agent skill · Claude Code, Codex, any ~/.agents reader</span>
+
+<p class="jevx-lead">The agent asks a short question, gets back <code>yes 0.92</code> or <code>billing 0.99</code> and an exit code it can branch on, and keeps its own reasoning for the real work. Any System One endpoint works: hosted Jev, self-hosted, or a personal model on 127.0.0.1.</p>
+
+<span class="jevx-eyebrow">Install</span>
+## One line
+
+```bash title="macOS / Linux"
+curl -fsSL https://muthuishere.github.io/jevx/install.sh | sh
+```
+
+Or `npm i -g @muthuishere/jevx`, or the Windows installer: see [Install](/jevx/start/install/). It puts the binary on your PATH and the agent skill into Claude Code, Codex and `~/.agents`. A single Go binary, no runtime dependencies.
+
+<span class="jevx-eyebrow">Real output</span>
+## What it looks like
+
+
+Real calls against the hosted Jev endpoint, output unedited. Exit codes are the contract: `0` yes, `1` no, `3` unsure, `4` error.
+
+```console
+$ echo "Prod is down" | jevx is "Is this urgent?"; echo "exit $?"
+yes 0.92
+exit 0
+
+$ echo "Weekly newsletter: our new office plants" | jevx is "Is this urgent?"; echo "exit $?"
+no 0.05
+exit 1
+
+$ jevx pick "Which team?" web=frontend api=backend billing=money --in "charged twice"
+billing 0.99
+
+$ jevx filter "Is this line an error or failure?" < app.log
+ERROR 09:12:04 payment gateway timeout after 30s
+```
+
+The same question as a batch, one JSON line per input, answered in parallel:
+
+```json title='jevx ask --lines app.log --noul err="Is this line an error or failure?"' {2}
+{"line":1,"input":"INFO  09:12:01 request served in 12ms","answers":{"err":{"answer":{"type":"noul","noul":0.02},"p":0.02,"verdict":"no"}}}
+{"line":2,"input":"ERROR 09:12:04 payment gateway timeout after 30s","answers":{"err":{"answer":{"type":"noul","noul":0.98},"p":0.98,"verdict":"yes"}}}
+{"line":3,"input":"INFO  09:12:05 cache warmed","answers":{"err":{"answer":{"type":"noul","noul":0.02},"p":0.02,"verdict":"no"}}}
+```
+
+<span class="jevx-eyebrow">Design</span>
+## Four ideas
+
+<CardGrid>
+	<Card title="One command" icon="seti:shell">
+		`jevx ask` takes any number of questions (yes/no, pick-one, rating) and one input or a batch.
+		`is`, `pick`, `filter` and `rank` are the same command with the question already shaped.
+	</Card>
+	<Card title="Your questions, saved" icon="document">
+		`jevx question add urgent --noul "…"` once, then `jevx ask urgent` from any repo. `--local` keeps a
+		question in the repo's `.jevx/questions.json`, committed with the code.
+	</Card>
+	<Card title="Context from your agent files" icon="open-book">
+		It reads the `## Jev` section of the `AGENTS.md` / `CLAUDE.md` you already have, global and per
+		folder, and never writes them. `jevx context` shows exactly what is sent.
+	</Card>
+	<Card title="Plugins as config" icon="setting">
+		A Claude Code hook is a few JSON fields: an event, the questions to ask, and a condition to deny,
+		warn, block or add context. Shipped disabled; shadow mode first.
+	</Card>
+</CardGrid>
+
+<span class="jevx-eyebrow">Inside an agent</span>
+## The agent reads a skill, not these docs
+
+The installed `SKILL.md` tells the agent when to reach for jevx, how to word a question so it stands alone, what each exit code means, and what never to do with it. A typical use:
+
+```bash title="Terminal"
+jevx ask --lines app.log --noul fail="Is this a failure an on-call engineer would act on?" \
+  | jq -c 'select(.answers.fail.verdict=="yes")'
+```
+
+The agent works on the lines that matched instead of reading the whole file, and says so in its report ("jevx flagged 1 of 3 lines"). See [Using it from an agent](/jevx/guides/agents/).
+
+<span class="jevx-eyebrow">Honest limits</span>
+## What it is not
+
+<ul class="jevx-not">
+	<li><strong>Not a safety gate.</strong>Permissions, money, legal and irreversible actions stay with you. A plugin can deny a shell command, but it is a probability threshold, not a policy engine.</li>
+	<li><strong>Not a generator.</strong>It never writes code, replies or files. A wrong answer is a wrong number, not a wrong patch.</li>
+	<li><strong>Not local by default.</strong>The question and the input go to whichever endpoint your profile points at. See <a href="/jevx/reference/privacy/">Privacy</a>.</li>
+	<li><strong>Not free.</strong>A hosted endpoint bills per call. <code>jevx stats</code> shows calls and tokens per day.</li>
+	<li><strong>Not an explanation.</strong>You get <code>yes 0.92</code>, not why. Write the question so the number means something.</li>
+	<li><strong>Not calibrated for you yet.</strong>The 0.8 / 0.2 thresholds are defaults. Check a few verdicts against your own judgement and tune per question.</li>
+</ul>
+
+<span class="jevx-eyebrow">Next</span>
+## Read the docs
+
+<CardGrid>
+	<LinkCard title="Getting started" description="Install, add a profile, ask one question." href="/jevx/start/getting-started/" />
+	<LinkCard title="Using it from an agent" description="What the skill tells Claude Code and Codex to do." href="/jevx/guides/agents/" />
+</CardGrid>

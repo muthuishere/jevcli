@@ -1,25 +1,76 @@
-name: pages
+# Build the Astro/Starlight docs site in site/ and deploy it to GitHub Pages
+# (same shape as the cljgo and toolnexus docs workflows).
+#
+# The installers and the agent skill are copied into site/public/ at build time,
+# so https://muthuishere.github.io/jevx/install.sh, install.cmd and skill.md keep
+# resolving without duplicating those files in git.
+#
+# ENABLE ONCE: repo Settings → Pages → Source: "GitHub Actions".
+name: Deploy Pages
+
 on:
   push:
     branches: [main]
-    paths: ["docs/**", "install.sh", "install.cmd", "cmd/jevcli/skill/**"]
+    paths:
+      - "site/**"
+      - "install.sh"
+      - "install.cmd"
+      - "cmd/**/skill/**"
+      - ".github/workflows/pages.yml"
   workflow_dispatch:
+
+# Least-privilege token for the Pages deployment.
 permissions:
   contents: read
   pages: write
   id-token: write
+
+# Allow one concurrent deployment; let an in-progress run finish.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
     environment:
       name: github-pages
-      url: ${{ steps.d.outputs.page_url }}
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - uses: actions/checkout@v4
-      - run: cp install.sh install.cmd docs/ && cp cmd/jevx/skill/SKILL.md docs/skill.md
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Copy installers and skill into the site root
+        run: |
+          cp install.sh install.cmd site/public/
+          for d in cmd/jevx cmd/jevcli; do
+            if [ -f "$d/skill/SKILL.md" ]; then cp "$d/skill/SKILL.md" site/public/skill.md; break; fi
+          done
+          test -f site/public/skill.md || { echo "no SKILL.md under cmd/jevx or cmd/jevcli" >&2; exit 1; }
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
-          path: docs
-      - id: d
+          node-version: 24
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: site
+
+      - name: Build site
+        run: npm run build
+        working-directory: site
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload site artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site/dist
+
+      - name: Deploy to GitHub Pages
+        id: deployment
         uses: actions/deploy-pages@v4
