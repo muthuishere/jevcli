@@ -29,14 +29,15 @@ number or a key, never prose. The agent keeps its reasoning for the real work.
 5. **Any endpoint, nothing hidden.** Any System One URL works (keys stay in environment variables, expanded only when a
    request is sent). Replies are validated, 429/5xx are retried, and every call is logged without its content.
 
-## Why not call the API directly?
+## Why jevx
 
-You can `curl` a System One endpoint, and a service you write in code should. A coding agent should not have to: it
-would put your key into a command (and its own context), rebuild the noul/choice/score JSON each time, split requests at
-32 questions, retry 429s, reject malformed replies, turn a probability into a decision, and tell an outage apart from a
-"no". That is a few hundred tokens of error-prone work per question. `jevx is "Is this urgent?"` is one line, the key
-never leaves the environment, and the installed skill tells the agent when to use it. Your `## Jev` context, saved
-questions, parallel batches, hooks and the call log come with it.
+Jev is great at small, typed decisions in well under a second. If you are building your own agent or service, call
+its API from your code: that is the right tool, and you do not need jevx.
+
+jevx is for the other case: you work inside a coding agent like Claude Code or Codex and want the same quick decisions
+there, without writing an integration. Install it once, set your key, and your agent can filter a log, route a ticket,
+rank results or check a command before running it, in one line. The installed skill tells the agent when that helps,
+and every answer comes back as `yes` / `no` / `unsure` with an exit code it can act on.
 
 How it compares with the other Jev CLIs, MCP servers and hooks:
 [muthuishere.github.io/jevx/reference/comparison](https://muthuishere.github.io/jevx/reference/comparison/).

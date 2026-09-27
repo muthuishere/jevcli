@@ -87,19 +87,12 @@ The same question as a batch, one JSON line per input, answered in parallel:
 	</Card>
 </CardGrid>
 
-<span class="jevx-eyebrow">Why not call the API directly?</span>
-## Because an agent should not have to
+<span class="jevx-eyebrow">Why jevx</span>
+## Jev, inside the agents you already use
 
-You can call a System One endpoint with `curl`. A script you write once should. A coding agent should not, and here is what it would have to get right every time:
+Jev is great at small, typed decisions in well under a second. If you are building your own agent or service, call its API from your code: that is the right tool, and you do not need jevx.
 
-- **The key.** To `curl` the API, the agent has to put the key in a command, where it lands in the transcript and the model's context. jevx reads `TYPESAFE_API_KEY` from the environment at send time; the agent never sees it.
-- **The request.** Noul, choice and score each have their own JSON shape and answer shape, requests cap at 32 questions, and replies can come back malformed. jevx builds the request, splits it, retries 429/5xx, and rejects a reply that does not answer exactly what was asked.
-- **The decision.** A raw probability is not a decision. jevx turns it into `yes` / `no` / `unsure` with your thresholds, and an exit code an `if` can use. An outage exits `4`, never a silent "no".
-- **The tokens.** A hand-written call is a few hundred tokens of JSON and parsing for the agent to write, per question. `jevx is "Is this urgent?"` is one line.
-- **Knowing when.** An agent does not know Jev exists. The installed skill tells it when to reach for it, how to word a question so it stands alone, and what to do when the answer is unsure.
-- **Everything around it.** Your `## Jev` context from AGENTS.md / CLAUDE.md, saved questions with tuned wording, parallel batches over files, hooks at agent events, and a content-free call log. None of that exists in a bare API call.
-
-If you are writing a service in code, call the API directly: jevx is for agents and shells.
+jevx is for the other case: you work inside a coding agent like Claude Code or Codex and want the same quick decisions there, without writing an integration. Install it once, set your key, and your agent can filter a log, route a ticket, rank results or check a command before running it, in one line. The installed skill tells the agent when that helps, and every answer comes back as `yes` / `no` / `unsure` with an exit code it can act on.
 
 <span class="jevx-eyebrow">Inside an agent</span>
 ## The agent reads a skill, not these docs
