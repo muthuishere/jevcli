@@ -15,7 +15,7 @@ It is a call to a System One style endpoint: you send questions plus an input an
 <details class="faq">
 <summary>Why not just let Claude decide?</summary>
 
-Because the small calls add up. Deciding whether each of 300 log lines is an error costs the agent context and tokens for every line; one batch call gives a number per line that the agent can filter with `jq`. A number is also something an `if` can use.
+Because the small calls add up. Deciding whether each of 300 log lines is an error costs the agent context and tokens for every line; one batch call gives a number per line that the agent can filter on. A number is also something an `if` can use.
 
 </details>
 

@@ -42,8 +42,7 @@ Claude Code and Codex load a skill when its `description` matches the task. `jev
 The user asks an agent to find what broke in last night's log. Instead of reading it, the agent runs one batch:
 
 ```bash title="Terminal"
-jevx ask --lines app.log --noul fail="Is this a failure an on-call engineer would act on?" \
-  | jq -c 'select(.answers.fail.verdict=="yes")'
+jevx filter "Is this a failure an on-call engineer would act on?" < app.log
 ```
 
 On the three-line sample from [Ask](/jevx/guides/ask/), the same kind of batch picks line 2 (the gateway timeout, P 0.98) and nothing else. The agent reads that line, fixes the cause, and says in its report that jevx picked 1 of 3 lines and it acted on that one. If the call had exited `4`, the skill says to report the failure, not to guess.

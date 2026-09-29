@@ -26,13 +26,13 @@ $ jevx filter "Is this line an error or failure an on-call engineer would act on
 Five new tickets, each to the right team.
 
 ```console
-$ jevx ask --states tickets.jsonl --choice team="Which team should handle this ticket?|web=frontend or UI;api=backend or API;billing=payments and invoices;docs=how-to question" \
-  | jq -c "{line, team: .answers.team.verdict, p: .answers.team.p}"
-{"line":1,"team":"web","p":1}
-{"line":2,"team":"billing","p":1}
-{"line":3,"team":"api","p":1}
-{"line":4,"team":"web","p":1}
-{"line":5,"team":"docs","p":0.99}
+$ jevx ask --states tickets.jsonl --choice team="Which team should handle this ticket?|web=frontend or UI;api=backend or API;billing=payments and invoices;docs=how-to question" --tsv \
+  | cut -f1,2
+web  1.00
+billing  1.00
+api  1.00
+web  1.00
+docs  0.99
 ```
 
 **Next:** Labels or assigns each ticket. One command, all tickets in parallel, output in input order.
@@ -124,12 +124,12 @@ $ jevx rank "Is this file likely where a payment gateway timeout is handled?" --
 Four CI failures. Fix real bugs first, re-run the flaky ones.
 
 ```console
-$ jevx ask --lines tests.txt --choice kind="Is this test failure a flaky test or a real bug?|flaky=timing, network or environment, passes on retry;bug=wrong result or crash in the code" \
-  | jq -c "{line, kind: .answers.kind.verdict, p: .answers.kind.p}"
-{"line":1,"kind":"bug","p":0.93}
-{"line":2,"kind":"flaky","p":1}
-{"line":3,"kind":"bug","p":1}
-{"line":4,"kind":"flaky","p":0.97}
+$ jevx ask --lines tests.txt --choice kind="Is this test failure a flaky test or a real bug?|flaky=timing, network or environment, passes on retry;bug=wrong result or crash in the code" --tsv \
+  | cut -f1,2
+bug  0.93
+flaky  1.00
+bug  1.00
+flaky  0.97
 ```
 
 **Next:** Fixes the rounding bug (line 1) and the nil pointer (line 3); re-runs the timeout and websocket tests.
@@ -139,14 +139,14 @@ $ jevx ask --lines tests.txt --choice kind="Is this test failure a flaky test or
 Six review comments; which must be fixed, which are nits, which are just approval?
 
 ```console
-$ jevx ask --lines reviews.txt --choice kind="What kind of review comment is this?|must=a real bug or risk that must be fixed;should=a reasonable change request;nit=style or naming only;none=praise or approval" \
-  | jq -c "{line, kind: .answers.kind.verdict}"
-{"line":1,"kind":"nit"}
-{"line":2,"kind":"must"}
-{"line":3,"kind":"none"}
-{"line":4,"kind":"should"}
-{"line":5,"kind":"none"}
-{"line":6,"kind":"must"}
+$ jevx ask --lines reviews.txt --choice kind="What kind of review comment is this?|must=a real bug or risk that must be fixed;should=a reasonable change request;nit=style or naming only;none=praise or approval" --tsv \
+  | cut -f1,2
+nit  1.00
+must  1.00
+none  1.00
+should  1.00
+none  1.00
+must  1.00
 ```
 
 **Next:** Fixes the infinite loop and the SQL injection first, replies to the retry-helper question, batches the nit.

@@ -230,6 +230,7 @@ func splitArgs(args []string, valued map[string]bool) (names, flags []string) {
 var (
 	outMode string
 	topN    int
+	outTSV  bool
 )
 
 func cmdAsk(args []string) {
@@ -240,6 +241,7 @@ func cmdAsk(args []string) {
 	qfile := fs.String("questions", "", "a question-set file: {NAME: {type, instructions, criteria}}")
 	prof := fs.String("profile", "", "endpoint profile")
 	asJSON := fs.Bool("json", false, "one input: print JSON instead of lines")
+	fs.BoolVar(&outTSV, "tsv", false, "batch: one tab-separated line per input, no jq needed: VERDICT<TAB>P for each question (by name), then the input")
 	raw := fs.Bool("raw", false, "one input: print the server's full response")
 	yes := fs.Float64("yes", -1, "override: noul P at or above is yes (default from `jevx defaults`)")
 	no := fs.Float64("no", -1, "override: noul P at or below is no (default from `jevx defaults`)")
@@ -445,6 +447,21 @@ func batch(cfg core.Config, p core.Profile, qs map[string]core.Question, set cor
 			case (h.v == "yes") == (outMode == "filter"):
 				pr("%s", h.s)
 			}
+		}
+		return code
+	}
+	if outTSV {
+		names := keys(qs)
+		for i, r := range rows {
+			cols := make([]string, 0, 2*len(names)+1)
+			for _, k := range names {
+				if m, ok := r.Answers[k].(map[string]any); ok {
+					cols = append(cols, m["verdict"].(string), fmt.Sprintf("%.2f", m["p"].(float64)))
+				} else {
+					cols = append(cols, "error", "-")
+				}
+			}
+			pr("%s", strings.Join(append(cols, inputs[i]), "\t"))
 		}
 		return code
 	}

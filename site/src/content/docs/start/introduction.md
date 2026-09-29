@@ -14,11 +14,10 @@ Any **System One** endpoint works: the hosted Jev model, a self-hosted one, or a
 
 ## Why hand a decision to another model
 
-Because the small calls add up. Deciding whether each of 300 log lines is an error costs the agent context and tokens for every line. One batch call gives a number per line that the agent can filter with `jq`, and a number is something an `if` can use.
+Because the small calls add up. Deciding whether each of 300 log lines is an error costs the agent context and tokens for every line. One batch call gives a number per line that the agent can filter on, and a number is something an `if` can use.
 
 ```bash title="Terminal"
-jevx ask --lines app.log --noul fail="Is this a failure an on-call engineer would act on?" \
-  | jq -c 'select(.answers.fail.verdict=="yes")'
+jevx filter "Is this a failure an on-call engineer would act on?" < app.log
 ```
 
 The agent then works on the lines that matched instead of reading the whole file, and says so in its report ("jevx flagged 1 of 3 lines").

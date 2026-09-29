@@ -45,8 +45,8 @@ jevx ask --states tickets.jsonl team,sev --parallel 8                # batch ove
   noul, the key or `unsure` for a choice, the level or `unsure` for a score. `--json` gives the same as JSON, and `--raw`
   gives the server's full reply.
 - **Output for a batch**: JSONL, in input order:
-  `{"line":2,"input":"...","answers":{"err":{"verdict":"yes","p":0.98,...}}}`. Filter it with
-  `jq 'select(.answers.err.verdict=="yes")'`.
+  `{"line":2,"input":"...","answers":{"err":{"verdict":"yes","p":0.98,...}}}`. No jq needed: `--tsv` prints
+  `VERDICT<TAB>P` per question, then the input; `jevx filter "Q" < file` prints only the yes inputs.
 - **Exit codes** (one input): **0** all yes or decided, **1** a "no", **3** an unsure, **4** an error (network, auth,
   invalid reply). An error is never a "no". On 4, say the call failed; on 3, check it yourself or ask the user. A batch
   exits 0, or 4 if any input failed (that line carries `"error"`).

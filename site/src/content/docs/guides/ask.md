@@ -96,11 +96,13 @@ jevx ask --lines app.log --noul err="Is this line an error or failure?"
 {"line":3,"input":"INFO  09:12:05 cache warmed","answers":{"err":{"answer":{"type":"noul","noul":0.02},"p":0.02,"verdict":"no"}}}
 ```
 
-Filter it with `jq`:
+No `jq` needed. `jevx filter` prints only the inputs that came back yes, and `--tsv` prints one plain line per input, `VERDICT<TAB>P` per question (by name) and then the input:
 
 ```bash title="Terminal"
-jevx ask --lines app.log --noul err="Is this line an error or failure?" \
-  | jq -c 'select(.answers.err.verdict=="yes") | .input'
+jevx filter "Is this line an error or failure?" < app.log
+jevx ask --lines app.log --noul err="Is this line an error or failure?" --tsv
+# yes	0.98	ERROR 09:12:04 payment gateway timeout after 30s
+# no	0.02	INFO  09:12:05 cache warmed'
 ```
 
 Batches run `parallel` requests at a time (default 8; `--parallel N` for one call). A batch exits `0`, or `4` if any input failed; that line carries an `"error"` field instead of answers.
