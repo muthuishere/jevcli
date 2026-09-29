@@ -22,6 +22,10 @@ jevx filter "Is this a failure an on-call engineer would act on?" < app.log
 
 The agent then works on the lines that matched instead of reading the whole file, and says so in its report ("jevx flagged 1 of 3 lines").
 
+## Repeat calls are free
+
+jevx keeps the model's answer, keyed by a hash of the endpoint, model, input and question. Asking the same thing about the same input again returns in milliseconds (about 7 ms against 350 ms) and sends nothing. It is on by default; `--fresh` asks again and `jevx cache disable` turns it off. Only answers are stored, never the input. See [the answer cache](/jevx/reference/privacy/#the-answer-cache).
+
 ## The shape of an answer
 
 | question type | you ask | you get |

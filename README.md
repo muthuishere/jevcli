@@ -26,7 +26,9 @@ number or a key, never prose. The agent keeps its reasoning for the real work.
 4. **Hooks as config.** Plugins turn any agent event into a judgement: refuse `rm -rf` before it runs, check a turn
    before it is handed back, flag prompt injection in fetched pages, route simple requests to a smaller model. A plugin
    is three lines of JSON; they ship disabled and start in shadow mode.
-5. **Any endpoint, nothing hidden.** Any System One URL works (keys stay in environment variables, expanded only when a
+5. **Repeat calls are free.** Answers are cached on your machine (a hash-keyed file each, never the input), so the same
+   call again returns in milliseconds and costs nothing. `--fresh` asks again; `jevx cache enable|disable|clear`.
+6. **Any endpoint, nothing hidden.** Any System One URL works (keys stay in environment variables, expanded only when a
    request is sent). Replies are validated, 429/5xx are retried, and every call is logged without its content.
 
 ## Jev, for your day-to-day work
@@ -95,7 +97,7 @@ sev              high       0.99
 team             billing    0.87
 urgent           yes        0.95
 
-$ jevx ask --lines app.log --noul err="Is this an error?" --parallel 8     # JSONL, one line per input, in order
+$ jevx ask --lines app.log --noul err="Is this an error?" --parallel 8     # a table, one row per input (--raw: the full JSONL)
 ```
 
 ## Context: from the files you already keep

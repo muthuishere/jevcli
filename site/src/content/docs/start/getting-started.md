@@ -66,6 +66,22 @@ exit 0
 
 The word is the verdict, the number is P(yes). Exit `0` means yes, `1` no, `3` unsure, `4` an error. See [Ask](/jevx/guides/ask/) for every form.
 
+### Batches and repeat calls
+
+A batch prints a readable table, one row per input, in order. Asking again is free: jevx keeps the model's answer, so a repeat returns in milliseconds and costs nothing.
+
+```console
+$ jevx ask --lines app.log --noul err="Is this an error?"
+VERDICT  P     INPUT
+no       0.05  2026-09-27 10:03:12 INFO  request served /checkout 200 in 84ms
+yes      0.81  2026-09-27 10:03:40 ERROR payment gateway timeout after 30s (order 4021)
+
+$ jevx ask --lines app.log --noul err="Is this an error?" --fresh    # ask the model again
+$ jevx cache disable                                                  # or: enable · ttl DAYS · dir PATH · clear
+```
+
+`--raw` prints the full JSONL for a script. See [Ask](/jevx/guides/ask/) and [Privacy](/jevx/reference/privacy/#the-answer-cache).
+
 ## 4. Let the agent use it
 
 Nothing more to do. The skill is installed, and Claude Code or Codex loads it when a task matches its description (classify, triage, filter, rank, "is this X", "which of these"). [Using it from an agent](/jevx/guides/agents/) shows what the agent is told.
@@ -75,4 +91,5 @@ Nothing more to do. The skill is installed, and Claude Code or Codex loads it wh
 - [Shortcuts](/jevx/guides/shortcuts/): `is`, `pick`, `filter`, `rank`.
 - [Saved questions](/jevx/guides/questions/): write a question once, reuse it by name.
 - [Context](/jevx/guides/context/): tell the model whose decision it is.
+- [The answer cache](/jevx/reference/privacy/#the-answer-cache): repeat calls are free; `--fresh`, `jevx cache`.
 - [CLI reference](/jevx/reference/cli/): every command on one page.

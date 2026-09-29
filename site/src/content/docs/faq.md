@@ -34,9 +34,16 @@ There is no published number, because none would hold for your questions and you
 </details>
 
 <details class="faq">
+<summary>Does it cache answers?</summary>
+
+Yes, by default. The same endpoint, model, input and question returns the stored answer in milliseconds and sends nothing, so a repeat costs nothing. Only the model's answer is stored (the file is named by a hash), never your input. `--fresh` asks again and refreshes it, an answer older than `cache_ttl_days` (7) is asked again on its own, and `jevx cache disable` turns it off. See [the answer cache](/jevx/reference/privacy/#the-answer-cache).
+
+</details>
+
+<details class="faq">
 <summary>What does it cost?</summary>
 
-jevx itself is free and open source. A hosted endpoint charges per call; `jevx stats` shows calls and tokens per day. A self-hosted or local model costs whatever it costs you to run.
+jevx itself is free and open source. A hosted endpoint charges per call, and a repeated call is answered from the [cache](/jevx/reference/privacy/#the-answer-cache) at no charge; `jevx stats` shows calls and tokens per day. A self-hosted or local model costs whatever it costs you to run.
 
 </details>
 

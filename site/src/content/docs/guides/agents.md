@@ -21,6 +21,7 @@ Claude Code and Codex load a skill when its `description` matches the task. `jev
 - **The forms:** `is` / `pick` / `filter` / `rank`, then `ask` with saved or inline questions over one input or a batch.
 - **Exit codes:** `0` act, `1` other branch, `3` check or ask, `4` say it failed. An error is never a no.
 - **Context:** read `## Jev` from the user's agent files; pass facts with `--context`; tell the user which file to edit, never edit it.
+- **Repeat calls:** answers are cached (on by default), so the same call again is instant and free; use `--fresh` when an answer must be re-asked, and say in the report when a result came from the cache.
 - **Saved questions:** check `question list` first; save per repo with `--local` when asked.
 - **Reporting:** word the question so it stands alone, and report when a verdict changed what it did: "jevx flagged 12 of 300 lines".
 - **Never:** use it as a safety gate, put secrets into `--in` or `--proposal`, or train another model on a hosted endpoint's answers unless its terms allow it.
