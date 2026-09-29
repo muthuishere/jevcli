@@ -30,7 +30,8 @@ jevx ask --noul urgent="Is this urgent for the person receiving it?" < email.txt
 # urgent           yes        0.95
 
 jevx ask urgent,team < ticket.txt                    # named questions, saved once in config (see below)
-jevx ask --lines app.log --noul err="Is this line an error?"        # batch: JSONL, one line per input
+jevx ask --lines app.log --noul err="Is this line an error?"        # batch: a table, one row per input
+jevx ask --lines app.log --noul err="Is this line an error?" --raw  # batch: the full JSONL, for a script
 jevx ask --states tickets.jsonl team,sev --parallel 8                # batch over JSON records
 ```
 
@@ -50,6 +51,23 @@ jevx ask --states tickets.jsonl team,sev --parallel 8                # batch ove
 - **Exit codes** (one input): **0** all yes or decided, **1** a "no", **3** an unsure, **4** an error (network, auth,
   invalid reply). An error is never a "no". On 4, say the call failed; on 3, check it yourself or ask the user. A batch
   exits 0, or 4 if any input failed (that line carries `"error"`).
+
+## Repeat calls are free: the answer cache
+
+jevx keeps what the model said, so asking the same thing about the same input again costs nothing and returns in
+milliseconds (about 7 ms against 350 ms). It is **on by default**. The key is a hash of the endpoint, model, input and
+question; the input and question text are never written to disk, only the answer. Thresholds are applied after the
+lookup, so `--yes` / `--min` changes reuse the stored answers. Failed calls are never stored.
+
+```bash
+jevx ask urgent --fresh < msg.txt     # ask the model again and refresh the stored answer (any ask, is, pick, filter, rank)
+jevx cache                            # on/off, folder, how many answers, ttl
+jevx cache disable                    # or: enable · ttl DAYS · dir PATH · clear   (same as: jevx config cache …)
+```
+Use `--fresh` when the answer must reflect a changed model or endpoint, or when a stored answer looks wrong. An answer
+older than `cache_ttl_days` (default 7) is asked again on its own. The folder is `cache_dir` in
+`~/.config/jevx/config.json` (default `~/.cache/jevx`). If a result is suspiciously identical between runs, that is
+the cache; say so in your report.
 
 ## Context: what the model should know
 
@@ -99,10 +117,10 @@ current directory unless you pass `--cwd DIR`.
 | `parallel` | 8 | concurrent requests in a batch |
 | `retries` / `timeout_s` / `chunk` | 3 / 60 / 32 | tries on 429/5xx, seconds per request, questions per request |
 | `ledger` | true | log each call without content to `~/.local/share/jevx/calls.jsonl` (`jevx stats`) |
-| `cache` / `cache_ttl_days` | true / 7 | reuse a stored answer for the same endpoint, model, input and question; `--fresh` on a call asks again; `jevx cache clear` empties it |
+| `cache` / `cache_ttl_days` | true / 7 | reuse a stored answer for the same endpoint, model, input and question; `--fresh` on a call asks again; `jevx cache enable\|disable\|clear` |
 | `accept_min` / `more_max` | 0.35 / 0.65 | legacy Stop hook thresholds (the `stop-judge` plugin has its own condition) |
 
-Flags override for one call: `--yes`, `--no`, `--min`, `--parallel`, `--profile`.
+Flags override for one call: `--yes`, `--no`, `--min`, `--parallel`, `--profile`, `--fresh`.
 
 ## Scenarios with real answers
 
@@ -116,11 +134,11 @@ Read it the first time you use jevx in a session, or whenever an answer comes ba
 
 | you are about to... | do this instead |
 |---|---|
-| read 300 lines to find the failures | `ask --lines log --noul fail="Is this a failure an on-call engineer would act on?"` |
+| read 300 lines to find the failures | `jevx filter "Is this a failure an on-call engineer would act on?" < log` (or `ask --lines log --noul fail="…"` for a table of every line's verdict and P) |
 | sort tickets or messages into buckets | `ask --states t.jsonl --choice team="Which team?\|web=UI;api=backend;ops=infra"` |
 | decide if two records are one entity | `printf 'A: %s\nB: %s' "$a" "$b" \| jevx ask --noul same="Are A and B the same customer?"` |
 | check a claim against a source | `jevx ask --noul ok="Does the text say payment is due in October?" < invoice.txt` |
-| rank search results | `ask --lines results.txt --noul hit="Does this answer: how do I get a refund?"`, then sort by `p` |
+| rank search results | `jevx rank "Does this answer: how do I get a refund?" --top 5 < results.txt` |
 | ask the user "A or B?" | `ask --in "<the facts>" --choice pick="Which would the user choose?\|a=<A>;b=<B>"`; ask only on exit 3 |
 | hand back your turn | `jevx judge --request "<user's request>" --proposal "<your final message>"` |
 

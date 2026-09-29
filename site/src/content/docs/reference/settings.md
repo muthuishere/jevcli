@@ -32,7 +32,7 @@ The third column says where the value comes from: `default`, `config`, or `profi
 | `timeout_s` | 60 | seconds per request |
 | `chunk` | 32 | questions per request; more are split across requests |
 | `ledger` | true | append one content-free line per call to `~/.local/share/jevx/calls.jsonl` |
-| `cache` | true | reuse the stored answer when the endpoint, model, input and question are the same; `--fresh` asks again ([the cache](/jevx/reference/privacy/#the-answer-cache)) |
+| `cache` | true | reuse the stored answer when the endpoint, model, input and question are the same; `--fresh` asks again, `jevx cache enable\|disable` switches it ([the cache](/jevx/reference/privacy/#the-answer-cache)) |
 | `cache_ttl_days` | 7 | a stored answer older than this is asked again |
 | `accept_min` / `more_max` | 0.35 / 0.65 | the `judge` thresholds the skill quotes (the `stop-judge` plugin carries its own condition) |
 

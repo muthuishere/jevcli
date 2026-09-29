@@ -436,6 +436,9 @@ func cmdConfig(args []string) {
 		return
 	}
 	switch args[0] {
+	case "cache":
+		cmdCache(args[1:])
+		return
 	case "set-endpoint":
 		if len(args) < 3 {
 			die("usage: jevx config set-endpoint PROFILE URL [MODEL]  (headers: jevx profile add … --header 'K: V')")
@@ -458,7 +461,7 @@ func cmdConfig(args []string) {
 		}
 		cfg.Default = args[1]
 	default:
-		die("usage: jevx config show | set-endpoint PROFILE URL [MODEL] [KEY_ENV] | default PROFILE")
+		die("usage: jevx config show | set-endpoint PROFILE URL [MODEL] [KEY_ENV] | default PROFILE | cache enable|disable|ttl DAYS|dir PATH|clear")
 	}
 	if err := core.SaveConfig(cfg); err != nil {
 		die("%v", err)

@@ -845,12 +845,34 @@ func cmdCache(args []string) {
 	case len(args) == 0 || args[0] == "stat":
 		n, b := core.CacheStat(dir)
 		on := *cfg.Settings(core.Profile{}).Cache
-		pr("cache    %s (%s)\nanswers  %d  (%.1f KB)\nttl      %d days   change: jevx defaults set cache_ttl_days N | cache false", dir, map[bool]string{true: "on", false: "off"}[on], n, float64(b)/1024, *cfg.Settings(core.Profile{}).CacheTTLDays)
+		pr("cache    %s (%s)\nanswers  %d  (%.1f KB)\nttl      %d days   change: jevx cache enable|disable|ttl DAYS|dir PATH", dir, map[bool]string{true: "on", false: "off"}[on], n, float64(b)/1024, *cfg.Settings(core.Profile{}).CacheTTLDays)
 	case args[0] == "clear":
 		pr("removed %d stored answers from %s", core.CacheClear(dir), dir)
+	case args[0] == "enable" || args[0] == "disable" || args[0] == "ttl":
+		switch args[0] {
+		case "ttl":
+			d, err := strconv.Atoi(strings.Join(args[1:], ""))
+			if err != nil || d < 1 {
+				die("usage: jevx cache ttl DAYS")
+			}
+			cfg.Defaults.CacheTTLDays = &d
+		default:
+			on := args[0] == "enable"
+			cfg.Defaults.Cache = &on
+		}
+		if err := core.SaveConfig(cfg); err != nil {
+			die("%v", err)
+		}
+		cmdCache([]string{"stat"})
+	case args[0] == "dir" && len(args) > 1:
+		cfg.CacheDir = args[1]
+		if err := core.SaveConfig(cfg); err != nil {
+			die("%v", err)
+		}
+		pr("cache folder: %s", cfg.CacheDirPath())
 	case args[0] == "dir":
 		pr("%s", dir)
 	default:
-		die("usage: jevx cache stat | clear | dir   (folder: cache_dir in %s)", core.ConfigPath())
+		die("usage: jevx cache [stat] | enable | disable | ttl DAYS | dir [PATH] | clear   (also: jevx config cache …; saved in %s)", core.ConfigPath())
 	}
 }

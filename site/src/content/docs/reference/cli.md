@@ -35,7 +35,7 @@ jevx: usage: jevx rank "QUESTION"|NAME ...  (see: jevx help)
 | `question add\|list\|show\|remove` | named questions, global or `--local` | [Saved questions](/jevx/guides/questions/) |
 | `context` | which `## Jev` sections would be sent, and from which files | [Context](/jevx/guides/context/) |
 | `defaults [show]\|set\|unset` | every setting, its value and where it comes from | [Settings](/jevx/reference/settings/) |
-| `cache [stat]\|clear\|dir` | the answer cache: how many answers are stored, delete them all, or print its folder | [Privacy](/jevx/reference/privacy/#the-answer-cache) |
+| `cache [stat]\|enable\|disable\|ttl DAYS\|dir [PATH]\|clear` | the answer cache: status, switch it on or off, set how long answers live, move it, or delete everything (also `config cache …`) | [Privacy](/jevx/reference/privacy/#the-answer-cache) |
 | `profile list\|add\|use\|remove\|show` | endpoints | [Settings](/jevx/reference/settings/#profiles) |
 
 ```text title="usage lines"
