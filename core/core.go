@@ -94,6 +94,8 @@ type Settings struct {
 	Ledger        *bool    `json:"ledger,omitempty"`         // log every call (no content) to calls.jsonl
 	AcceptMin     *float64 `json:"accept_min,omitempty"`     // Stop hook: block when P(accepts) is below
 	MoreMax       *float64 `json:"more_max,omitempty"`       // Stop hook: block when P(wanted_more) is above
+	Cache         *bool    `json:"cache,omitempty"`          // reuse stored answers for the same endpoint, model, input and question
+	CacheTTLDays  *int     `json:"cache_ttl_days,omitempty"` // a stored answer older than this is asked again
 }
 
 func fp(v float64) *float64 { return &v }
@@ -102,7 +104,7 @@ func bp(v bool) *bool       { return &v }
 
 // Builtin are the defaults when nothing is configured.
 var Builtin = Settings{Yes: fp(0.8), No: fp(0.2), MinConfidence: fp(0.6), Parallel: ip(8), Retries: ip(3), TimeoutS: ip(60),
-	Chunk: ip(32), Ledger: bp(true), AcceptMin: fp(0.35), MoreMax: fp(0.65)}
+	Chunk: ip(32), Ledger: bp(true), AcceptMin: fp(0.35), MoreMax: fp(0.65), Cache: bp(true), CacheTTLDays: ip(7)}
 
 // Over returns s with every field set in o taking precedence.
 func (s Settings) Over(o Settings) Settings {
@@ -135,6 +137,12 @@ func (s Settings) Over(o Settings) Settings {
 	}
 	if o.MoreMax != nil {
 		s.MoreMax = o.MoreMax
+	}
+	if o.Cache != nil {
+		s.Cache = o.Cache
+	}
+	if o.CacheTTLDays != nil {
+		s.CacheTTLDays = o.CacheTTLDays
 	}
 	return s
 }
@@ -201,6 +209,7 @@ type Config struct {
 	LocalFile  string              `json:"local_context_file,omitempty"`    // file holding the folder section (default AGENTS.md, then CLAUDE.md)
 	LocalSect  string              `json:"local_context_section,omitempty"` // the section heading, global and folder (default "Jev"; any level)
 	GlobalFile string              `json:"global_context_file,omitempty"`   // global files holding the section (comma list; default below)
+	CacheDir   string              `json:"cache_dir,omitempty"`             // where stored answers live (default ~/.cache/jevx)
 }
 
 func Home() string { h, _ := os.UserHomeDir(); return h }

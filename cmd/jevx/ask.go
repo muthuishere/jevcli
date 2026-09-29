@@ -65,11 +65,24 @@ func normState(s string) (string, error) {
 
 // askChunks asks every question about one state, in chunks the server accepts; the model name comes from the reply.
 func askChunks(p core.Profile, state string, qs map[string]core.Question, set core.Settings) (map[string]core.Answer, any, error) {
-	ks := keys(qs)
 	out, model := map[string]core.Answer{}, any(nil)
-	for i := 0; i < len(ks); i += *set.Chunk {
+	ttl := time.Duration(*set.CacheTTLDays) * 24 * time.Hour
+	dir, hashes := "", map[string]string{}
+	if *set.Cache {
+		dir = cacheDir
+	}
+	var miss []string
+	for _, k := range keys(qs) {
+		hashes[k] = core.CacheKey(p, state, qs[k].Wire())
+		if a, m, ok := core.CacheGet(dir, hashes[k], ttl); ok {
+			out[k], model = a, m
+			continue
+		}
+		miss = append(miss, k)
+	}
+	for i := 0; i < len(miss); i += *set.Chunk {
 		part := map[string]any{}
-		for _, k := range ks[i:min(i+*set.Chunk, len(ks))] {
+		for _, k := range miss[i:min(i+*set.Chunk, len(miss))] {
 			part[k] = qs[k].Wire()
 		}
 		ans, raw, err := core.AskRaw(p, state, part, time.Duration(*set.TimeoutS)*time.Second)
@@ -82,6 +95,7 @@ func askChunks(p core.Profile, state string, qs map[string]core.Question, set co
 		}
 		for k, a := range ans {
 			out[k] = a
+			core.CachePut(dir, hashes[k], a, model)
 		}
 	}
 	return out, model, nil
@@ -229,9 +243,10 @@ func splitArgs(args []string, valued map[string]bool) (names, flags []string) {
 // outMode is set by the shortcut verbs: "bare" (one question, print VERDICT P), "filter" / "filter-v" (print the
 // matching inputs), "rank" (print P and input, best first; topN limits it).
 var (
-	outMode string
-	topN    int
-	outRaw  bool
+	outMode  string
+	topN     int
+	outRaw   bool
+	cacheDir string // "" until cmdAsk resolves it from config.json
 )
 
 func cmdAsk(args []string) {
@@ -242,6 +257,7 @@ func cmdAsk(args []string) {
 	qfile := fs.String("questions", "", "a question-set file: {NAME: {type, instructions, criteria}}")
 	prof := fs.String("profile", "", "endpoint profile")
 	asJSON := fs.Bool("json", false, "one input: print JSON instead of lines")
+	fs.BoolVar(&core.CacheFresh, "fresh", false, "ask the model again and refresh the stored answers (the cache is otherwise used)")
 	raw := fs.Bool("raw", false, "the full result as it is: the server's response for one input, JSONL (line, input, every answer) for a batch")
 	yes := fs.Float64("yes", -1, "override: noul P at or above is yes (default from `jevx defaults`)")
 	no := fs.Float64("no", -1, "override: noul P at or below is no (default from `jevx defaults`)")
@@ -269,6 +285,7 @@ func cmdAsk(args []string) {
 		die("%v", err)
 	}
 	set := cfg.Settings(p)
+	cacheDir = cfg.CacheDirPath()
 	if *yes >= 0 {
 		set.Yes = yes
 	}
@@ -632,7 +649,7 @@ func cmdQuestion(args []string) {
 }
 
 // settingKeys maps the config keys to their Settings fields.
-var settingKeys = []string{"yes", "no", "min_confidence", "parallel", "retries", "timeout_s", "chunk", "ledger", "accept_min", "more_max"}
+var settingKeys = []string{"yes", "no", "min_confidence", "parallel", "retries", "timeout_s", "chunk", "ledger", "accept_min", "more_max", "cache", "cache_ttl_days"}
 
 // cmdDefaults: jevx defaults [--profile P] | set KEY VALUE [--profile P] | unset KEY [--profile P].
 func cmdDefaults(args []string) {
@@ -818,4 +835,22 @@ func cmdVerb(verb string, args []string) {
 		}
 	}
 	cmdAsk(append(qflag, flags...))
+}
+
+// cmdCache: jevx cache stat | clear | dir.
+func cmdCache(args []string) {
+	cfg := core.LoadConfig()
+	dir := cfg.CacheDirPath()
+	switch {
+	case len(args) == 0 || args[0] == "stat":
+		n, b := core.CacheStat(dir)
+		on := *cfg.Settings(core.Profile{}).Cache
+		pr("cache    %s (%s)\nanswers  %d  (%.1f KB)\nttl      %d days   change: jevx defaults set cache_ttl_days N | cache false", dir, map[bool]string{true: "on", false: "off"}[on], n, float64(b)/1024, *cfg.Settings(core.Profile{}).CacheTTLDays)
+	case args[0] == "clear":
+		pr("removed %d stored answers from %s", core.CacheClear(dir), dir)
+	case args[0] == "dir":
+		pr("%s", dir)
+	default:
+		die("usage: jevx cache stat | clear | dir   (folder: cache_dir in %s)", core.ConfigPath())
+	}
 }

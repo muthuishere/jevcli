@@ -35,11 +35,12 @@ jevx: usage: jevx rank "QUESTION"|NAME ...  (see: jevx help)
 | `question add\|list\|show\|remove` | named questions, global or `--local` | [Saved questions](/jevx/guides/questions/) |
 | `context` | which `## Jev` sections would be sent, and from which files | [Context](/jevx/guides/context/) |
 | `defaults [show]\|set\|unset` | every setting, its value and where it comes from | [Settings](/jevx/reference/settings/) |
+| `cache [stat]\|clear\|dir` | the answer cache: how many answers are stored, delete them all, or print its folder | [Privacy](/jevx/reference/privacy/#the-answer-cache) |
 | `profile list\|add\|use\|remove\|show` | endpoints | [Settings](/jevx/reference/settings/#profiles) |
 
 ```text title="usage lines"
 jevx: usage: jevx question add NAME --noul "QUESTION" | --choice "QUESTION|k=desc;k2=desc" | --score "QUESTION|low;mid;high" [--yes 0.85 --no 0.15 --min 0.6]
-jevx: usage: jevx defaults [show] | set KEY VALUE | unset KEY  [--profile P]   keys: yes, no, min_confidence, parallel, retries, timeout_s, chunk, ledger, accept_min, more_max
+jevx: usage: jevx defaults [show] | set KEY VALUE | unset KEY  [--profile P]   keys: yes, no, min_confidence, parallel, retries, timeout_s, chunk, ledger, accept_min, more_max, cache, cache_ttl_days
 jevx: usage: jevx profile add NAME URL [--model M] [--header 'K: V' ...] [--questions FILE]
 ```
 
@@ -66,4 +67,4 @@ jevx: usage: jevx hook run EVENT | status | review [N] | enable|disable stop  (p
 
 ## Global flags
 
-Every command takes `--cwd DIR` to run as if from that directory. The asking commands take `--profile`, `--yes`, `--no`, `--min`, `--parallel`, `--context TEXT|@file` and `--no-context`.
+Every command takes `--cwd DIR` to run as if from that directory. The asking commands take `--profile`, `--yes`, `--no`, `--min`, `--parallel`, `--context TEXT|@file` and `--no-context`. `ask` and the shortcuts also take `--fresh`: skip the answer cache and refresh what it holds.

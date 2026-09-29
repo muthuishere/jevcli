@@ -468,19 +468,21 @@ func cmdConfig(args []string) {
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: jevx ask|is|pick|filter|rank|question|context|defaults|judge|plugin|hook|profile|stats|install|uninstall|skill|version")
+		fmt.Fprintln(os.Stderr, "usage: jevx ask|is|pick|filter|rank|question|context|defaults|cache|judge|plugin|hook|profile|stats|install|uninstall|skill|version")
 		os.Exit(2)
 	}
 	a := takeCwd(os.Args[2:])
 	switch os.Args[1] {
 	case "help", "-h", "--help":
-		pr("usage: jevx ask|is|pick|filter|rank|question|context|defaults|judge|plugin|hook|profile|stats|install|uninstall|skill|version\n  jevx COMMAND -h for flags; jevx skill for the full guide; https://muthuishere.github.io/jevx/")
+		pr("usage: jevx ask|is|pick|filter|rank|question|context|defaults|cache|judge|plugin|hook|profile|stats|install|uninstall|skill|version\n  jevx COMMAND -h for flags; jevx skill for the full guide; https://muthuishere.github.io/jevx/")
 	case "ask", "a":
 		cmdAsk(a)
 	case "is", "pick", "filter", "rank":
 		cmdVerb(os.Args[1], a)
 	case "question", "questions", "q":
 		cmdQuestion(a)
+	case "cache":
+		cmdCache(a)
 	case "defaults", "settings":
 		cmdDefaults(a)
 	case "context", "ctx":

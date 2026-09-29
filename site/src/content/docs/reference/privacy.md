@@ -23,6 +23,10 @@ The skill tells agents never to put secrets into `--in` or `--proposal`. Redacti
 
 A header like `Authorization: Bearer $JEV_API_KEY` is stored with the `$VAR` literal and expanded from the environment at request time. `profile list` prints the literal, not the value. If the variable is unset the call fails with its name (exit `4`) rather than sending an empty header.
 
+## The answer cache
+
+With `cache` true (the default), jevx keeps what the model said so the same call is not paid for twice. Each answer is one small file in `~/.cache/jevx/` (`cache_dir` in config.json), named by a SHA-256 hash of the endpoint URL, model, input and question. The input and the question are never written to disk, only the model's answer and when it was stored, and headers are not part of the hash, so rotating a key keeps the cache. A stored answer is used for `cache_ttl_days` (default 7); `--fresh` asks again and overwrites it; `jevx cache clear` deletes everything; `jevx defaults set cache false` turns it off. Failed calls are never stored. Thresholds are applied after the lookup, so changing `--yes` or `--min` reuses the same answers. Calls answered from the cache send nothing and add nothing to the ledger.
+
 ## The ledger
 
 With `ledger` true (the default), every call appends one line to `~/.local/share/jevx/calls.jsonl`: the host, model, number of questions, a 12-hex-character hash of the question set, latency, token usage and an error message if any. It never holds the input, the question text or a header. `JEVX_LEDGER=off` disables it for a shell.

@@ -99,6 +99,7 @@ current directory unless you pass `--cwd DIR`.
 | `parallel` | 8 | concurrent requests in a batch |
 | `retries` / `timeout_s` / `chunk` | 3 / 60 / 32 | tries on 429/5xx, seconds per request, questions per request |
 | `ledger` | true | log each call without content to `~/.local/share/jevx/calls.jsonl` (`jevx stats`) |
+| `cache` / `cache_ttl_days` | true / 7 | reuse a stored answer for the same endpoint, model, input and question; `--fresh` on a call asks again; `jevx cache clear` empties it |
 | `accept_min` / `more_max` | 0.35 / 0.65 | legacy Stop hook thresholds (the `stop-judge` plugin has its own condition) |
 
 Flags override for one call: `--yes`, `--no`, `--min`, `--parallel`, `--profile`.

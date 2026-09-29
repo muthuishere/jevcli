@@ -46,6 +46,7 @@ An illustrative file with every top-level field (values are examples, not defaul
 | `defaults` | settings that override the built-ins; see [Settings](/jevx/reference/settings/) |
 | `questions` | named questions: `jevx ask NAME` |
 | `plugins` | name → plugin; see [Plugins](/jevx/guides/plugins/) |
+| `cache_dir` | where the answer cache lives (default `~/.cache/jevx`; `~` expanded) |
 | `local_context_section` | the section heading, global and folder (default `Jev`; any level) |
 | `local_context_file` | file holding the folder section (default `AGENTS.md`, then `CLAUDE.md`) |
 | `global_context_file` | global files holding the section (comma list, `~` expanded) |
