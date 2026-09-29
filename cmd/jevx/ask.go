@@ -20,6 +20,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"text/tabwriter"
 	"time"
 
 	"github.com/muthuishere/jevx/core"
@@ -230,7 +231,7 @@ func splitArgs(args []string, valued map[string]bool) (names, flags []string) {
 var (
 	outMode string
 	topN    int
-	outTSV  bool
+	outRaw  bool
 )
 
 func cmdAsk(args []string) {
@@ -241,8 +242,7 @@ func cmdAsk(args []string) {
 	qfile := fs.String("questions", "", "a question-set file: {NAME: {type, instructions, criteria}}")
 	prof := fs.String("profile", "", "endpoint profile")
 	asJSON := fs.Bool("json", false, "one input: print JSON instead of lines")
-	fs.BoolVar(&outTSV, "tsv", false, "batch: one tab-separated line per input, no jq needed: VERDICT<TAB>P for each question (by name), then the input")
-	raw := fs.Bool("raw", false, "one input: print the server's full response")
+	raw := fs.Bool("raw", false, "the full result as it is: the server's response for one input, JSONL (line, input, every answer) for a batch")
 	yes := fs.Float64("yes", -1, "override: noul P at or above is yes (default from `jevx defaults`)")
 	no := fs.Float64("no", -1, "override: noul P at or below is no (default from `jevx defaults`)")
 	minC := fs.Float64("min", -1, "override: choice / score confidence below is unsure (default from `jevx defaults`)")
@@ -261,6 +261,7 @@ func cmdAsk(args []string) {
 	})
 	names, flags := splitArgs(args, valued)
 	_ = fs.Parse(flags)
+	outRaw = *raw
 
 	cfg := core.LoadConfig()
 	name, p, err := cfg.Profile(*prof)
@@ -378,7 +379,7 @@ func cmdAsk(args []string) {
 	os.Exit(code)
 }
 
-// batch asks every question of every input, set.Parallel at a time, and prints one JSONL line per input in input
+// batch asks every question of every input, set.Parallel at a time, and prints a readable table (--raw: one JSONL line per input) in input
 // order. A failed input prints its error and the rest go on; it returns 4 if any failed.
 func batch(cfg core.Config, p core.Profile, qs map[string]core.Question, set core.Settings, inputs []string, nums []int, extra []string) int {
 	type row struct {
@@ -450,8 +451,17 @@ func batch(cfg core.Config, p core.Profile, qs map[string]core.Question, set cor
 		}
 		return code
 	}
-	if outTSV {
+	if !outRaw {
 		names := keys(qs)
+		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+		head := []string{"VERDICT", "P"}
+		if len(names) > 1 {
+			head = head[:0]
+			for _, k := range names {
+				head = append(head, k, "P")
+			}
+		}
+		fmt.Fprintln(w, strings.Join(append(head, "INPUT"), "\t"))
 		for i, r := range rows {
 			cols := make([]string, 0, 2*len(names)+1)
 			for _, k := range names {
@@ -461,8 +471,9 @@ func batch(cfg core.Config, p core.Profile, qs map[string]core.Question, set cor
 					cols = append(cols, "error", "-")
 				}
 			}
-			pr("%s", strings.Join(append(cols, inputs[i]), "\t"))
+			fmt.Fprintln(w, strings.Join(append(cols, inputs[i]), "\t"))
 		}
+		w.Flush()
 		return code
 	}
 	for _, r := range rows {

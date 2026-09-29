@@ -22,13 +22,13 @@ $ jevx filter "Is this line an error or failure an on-call engineer would act on
 Five new tickets, each to the right team.
 
 ```
-$ jevx ask --states tickets.jsonl --choice team="Which team should handle this ticket?|web=frontend or UI;api=backend or API;billing=payments and invoices;docs=how-to question" --tsv \
-  | cut -f1,2
-web  1.00
-billing  1.00
-api  1.00
-web  1.00
-docs  0.99
+$ jevx ask --states tickets.jsonl --choice team="Which team should handle this ticket?|web=frontend or UI;api=backend or API;billing=payments and invoices;docs=how-to question" \
+  | awk 'NR>1 {print $1, $2}'
+web 1.00
+billing 1.00
+api 1.00
+web 1.00
+docs 0.99
 ```
 
 **Next:** Labels or assigns each ticket. One command, all tickets in parallel, output in input order.
@@ -120,12 +120,12 @@ $ jevx rank "Is this file likely where a payment gateway timeout is handled?" --
 Four CI failures. Fix real bugs first, re-run the flaky ones.
 
 ```
-$ jevx ask --lines tests.txt --choice kind="Is this test failure a flaky test or a real bug?|flaky=timing, network or environment, passes on retry;bug=wrong result or crash in the code" --tsv \
-  | cut -f1,2
-bug  0.93
-flaky  1.00
-bug  1.00
-flaky  0.97
+$ jevx ask --lines tests.txt --choice kind="Is this test failure a flaky test or a real bug?|flaky=timing, network or environment, passes on retry;bug=wrong result or crash in the code" \
+  | awk 'NR>1 {print $1, $2}'
+bug 0.93
+flaky 1.00
+bug 1.00
+flaky 0.97
 ```
 
 **Next:** Fixes the rounding bug (line 1) and the nil pointer (line 3); re-runs the timeout and websocket tests.
@@ -135,14 +135,14 @@ flaky  0.97
 Six review comments; which must be fixed, which are nits, which are just approval?
 
 ```
-$ jevx ask --lines reviews.txt --choice kind="What kind of review comment is this?|must=a real bug or risk that must be fixed;should=a reasonable change request;nit=style or naming only;none=praise or approval" --tsv \
-  | cut -f1,2
-nit  1.00
-must  1.00
-none  1.00
-should  1.00
-none  1.00
-must  1.00
+$ jevx ask --lines reviews.txt --choice kind="What kind of review comment is this?|must=a real bug or risk that must be fixed;should=a reasonable change request;nit=style or naming only;none=praise or approval" \
+  | awk 'NR>1 {print $1, $2}'
+nit 1.00
+must 1.00
+none 1.00
+should 1.00
+none 1.00
+must 1.00
 ```
 
 **Next:** Fixes the infinite loop and the SQL injection first, replies to the retry-helper question, batches the nit.

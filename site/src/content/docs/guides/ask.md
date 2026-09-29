@@ -84,25 +84,27 @@ jevx ask --json --noul spam="Is this message spam?" --in "Congratulations, you h
 
 ## Output for a batch
 
-JSONL in input order, one object per input with `line`, `input` and `answers`. Each answer carries `verdict` and, for yes/no, `p`.
+A batch prints a readable table, one row per input, in input order:
+
+```console
+$ jevx ask --lines app.log --noul err="Is this line an error or failure?"
+VERDICT  P     INPUT
+yes      0.98  ERROR 09:12:04 payment gateway timeout after 30s
+no       0.02  INFO  09:12:05 cache warmed
+```
+
+With several questions each gets a VERDICT and P column. `jevx filter "Q" < app.log` prints only the inputs that came back yes.
+
+`--raw` prints the full result instead: JSONL in input order, one object per input with `line`, `input` and `answers` (each carrying `verdict` and, for yes/no, `p`), for a script.
 
 ```bash title="Terminal"
-jevx ask --lines app.log --noul err="Is this line an error or failure?"
+jevx ask --lines app.log --noul err="Is this line an error or failure?" --raw
 ```
 
 ```json title="output" {2}
 {"line":1,"input":"INFO  09:12:01 request served in 12ms","answers":{"err":{"answer":{"type":"noul","noul":0.02},"p":0.02,"verdict":"no"}}}
 {"line":2,"input":"ERROR 09:12:04 payment gateway timeout after 30s","answers":{"err":{"answer":{"type":"noul","noul":0.98},"p":0.98,"verdict":"yes"}}}
 {"line":3,"input":"INFO  09:12:05 cache warmed","answers":{"err":{"answer":{"type":"noul","noul":0.02},"p":0.02,"verdict":"no"}}}
-```
-
-No `jq` needed. `jevx filter` prints only the inputs that came back yes, and `--tsv` prints one plain line per input, `VERDICT<TAB>P` per question (by name) and then the input:
-
-```bash title="Terminal"
-jevx filter "Is this line an error or failure?" < app.log
-jevx ask --lines app.log --noul err="Is this line an error or failure?" --tsv
-# yes	0.98	ERROR 09:12:04 payment gateway timeout after 30s
-# no	0.02	INFO  09:12:05 cache warmed'
 ```
 
 Batches run `parallel` requests at a time (default 8; `--parallel N` for one call). A batch exits `0`, or `4` if any input failed; that line carries an `"error"` field instead of answers.
