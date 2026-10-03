@@ -2,14 +2,12 @@
 # release.sh: one command from a green main to a verified release.
 #   scripts/release.sh patch|minor|major|vX.Y.Z      (task release -- patch)
 # Steps: checks (clean main, in sync, vet, tests, site build, optional secret check) -> tag -> push main + tag ->
-# wait for the release and Pages workflows -> verify the release assets, npm, and the site header -> optional mirror.
+# wait for the release and Pages workflows -> verify the release assets, npm, and the site header.
 # Every version (binaries, npm, the site header) comes from the tag, so nothing is edited by hand.
 #
 # Environment (all optional):
 #   REMOTE               where to push (default git@github.com:muthuishere/jevx.git)
 #   SITE_URL             the docs site to verify (default https://muthuishere.github.io/jevx)
-#   MIRROR_DEPLOY        a command that redeploys a mirror of the docs site after the release
-#   MIRROR_URL           the mirror to verify after MIRROR_DEPLOY
 #   SEAL_ALLOW           comma list of secret names `sec seal --check` may report as false positives
 #   DRY_RUN=1            run the checks and print the next tag, change nothing
 set -euo pipefail
@@ -85,9 +83,4 @@ check_site() {
   die "$1 header shows $(header "$1"), not $next"
 }
 check_site "$SITE_URL"
-if [ -n "${MIRROR_DEPLOY:-}" ]; then
-  say "mirror"
-  bash -c "$MIRROR_DEPLOY" >/dev/null
-  [ -n "${MIRROR_URL:-}" ] && check_site "$MIRROR_URL"
-fi
 say "released $next"
