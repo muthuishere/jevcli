@@ -14,10 +14,10 @@ import (
 
 func TestScrubRemovesSecretsEmailsPhones(t *testing.T) {
 	t.Setenv("MYAPP_API_KEY", "liveValue_0123456789abcdef")
-	in := "key liveValue_0123456789abcdef; mail ops@deemwar.com; call +91 98765 43210 or 9876543210; " +
+	in := "key liveValue_0123456789abcdef; mail ops@example.com; call +91 98765 43210 or 9876543210; " +
 		"gh ghp_abcdefghijklmnopqrstuvwxyz0123; db postgres://u:pw1234@host/db; password: hunter2hunter2xyz"
 	out, n := Scrub(in)
-	for _, leak := range []string{"liveValue_0123456789abcdef", "ops@deemwar.com", "98765 43210", "9876543210",
+	for _, leak := range []string{"liveValue_0123456789abcdef", "ops@example.com", "98765 43210", "9876543210",
 		"ghp_abcdefghijklmnopqrstuvwxyz0123", "u:pw1234@", "hunter2hunter2xyz"} {
 		if strings.Contains(out, leak) {
 			t.Fatalf("leaked %q in %q", leak, out)
@@ -57,7 +57,7 @@ func TestHostedCallIsScrubbedAndLedgered(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("JEVX_LEDGER", "")
-	t.Setenv("JEVX_CALLER", "agents/research")
+	t.Setenv("JEVX_CALLER", "my-agent")
 	t.Setenv("SOME_SECRET_TOKEN", "s3cr3t-value-abcdefgh")
 	ForceHosted, LedgerOn = true, true
 	defer func() { ForceHosted = false }()
@@ -89,7 +89,7 @@ func TestHostedCallIsScrubbedAndLedgered(t *testing.T) {
 	if err := json.Unmarshal([]byte(strings.TrimSpace(string(b))), &row); err != nil {
 		t.Fatal(err)
 	}
-	if row["profile"] != "jev" || row["caller"] != "agents/research" || row["questions"] != float64(1) ||
+	if row["profile"] != "jev" || row["caller"] != "my-agent" || row["questions"] != float64(1) ||
 		row["hosted"] != true || row["redacted"].(float64) < 3 || row["ts"] == "" {
 		t.Fatalf("ledger row missing fields: %v", row)
 	}

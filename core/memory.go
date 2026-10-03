@@ -5,7 +5,7 @@ package core
 // A memory is a folder of distilled markdown (a cited wiki). `index` cuts it into heading sections with line ranges;
 // a question's input is the BM25 query; the best sections are appended AFTER the item, within a character budget,
 // each with its citation (page#heading Lstart-Lend). Pages named in the input come first, then pinned pages (notices),
-// then BM25. The design and the held-out numbers behind it: agents/jevresearch/JEV-MEMORY-RESEARCH.md (deemwar).
+// then BM25.
 //
 // BM25 is the CiteNexus BM25-lite formula (k1=1.5, b=0.75, idf = ln(1 + (N-n+0.5)/(n+0.5)), query terms as a set),
 // with this tokenizer: lowercase word runs, English stopwords out, a light suffix stemmer, heading terms counted twice.

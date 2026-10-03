@@ -104,6 +104,25 @@ $ jevx ask --lines app.log --noul err="Is this an error?" --parallel 8     # a t
 
 ```markdown
 <!-- AGENTS.md or CLAUDE.md, in your home folder (global) or in a repo (folder) -->
+## Memory: judge against your own notes
+
+`jevx memory` points a question at a folder of distilled, cited markdown (a wiki, runbooks, release notes). For each item it
+retrieves the best-matching sections (pages named in the item first, then pinned pages, then BM25; no embeddings, nothing
+leaves the machine to build it) and appends them **after** the item, so the server's token cut can trim notes but never the item.
+
+```sh
+jevx memory add docs ./wiki --pin NOTICES.md --repo app=~/src/app   # register a folder; cites like app:path:L10-L20 are hashed
+jevx memory index docs                                              # (re)build after the pages change
+jevx memory check docs                                              # pages or cited lines that changed are marked stale and skipped
+jevx memory show docs "does v2 drop the 512-token limit?"           # what would be retrieved, with page#heading and lines
+jevx ask --memory docs --memory-k 3 --memory-budget 2000 --lines claims.txt --noul "true=Is this claim correct per the notes?"
+```
+
+**Honest caveat.** On 68 held-out claims (34 true, 34 with one changed number or word), notes lifted a small local model from
+AUC 0.30 to 0.86 and hosted Jev from 0.62 to 0.83 (both significant). It is **weakest at spotting a changed number**: a note
+that matches except for one figure pulls the answer toward "true". Pair it with a number/entity diff rule (compare the figures
+in the item with those in the retrieved note) before trusting a "true".
+
 ## Jev
 
 This repo is a payments service; any money-movement bug is critical.

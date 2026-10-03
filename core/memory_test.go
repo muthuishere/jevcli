@@ -159,7 +159,7 @@ func TestSaveLoadAndNames(t *testing.T) {
 	}
 }
 
-// refactor review 2378dc2, blocker 1: a JSON state that already has "memory" must stay valid JSON.
+// Regression: a JSON state that already has "memory" must stay valid JSON.
 func TestJSONStateWithAMemoryFieldStaysJSON(t *testing.T) {
 	m, _ := testMemory(t)
 	hits := m.Retrieve("Which port does the server use?", 1, 2000)
@@ -182,7 +182,7 @@ func TestJSONStateWithAMemoryFieldStaysJSON(t *testing.T) {
 	}
 }
 
-// refactor review 2378dc2, blocker 2: the budget cut must not split a rune, and counts runes.
+// Regression: the budget cut must not split a rune, and counts runes.
 func TestBudgetCutIsRuneSafe(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	dir := t.TempDir()

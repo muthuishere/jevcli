@@ -537,7 +537,7 @@ const MaxContextChars = 4000
 
 // WithContext adds the context AFTER the state: the global section, the folder section, then the per-call extra.
 // The item being judged always comes first, because the server keeps only the first max_len tokens (openjevx: 1024);
-// context in front of it could push the item out of the model's view (jevresearch, 2026-10-03).
+// context in front of it could push the item out of the model's view (found 2026-10-03).
 func (c Config) WithContext(p Profile, state string, extra ...string) string {
 	var parts []string
 	if !NoContext {
