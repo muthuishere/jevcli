@@ -3,8 +3,11 @@ version: '3'
 tasks:
   test:
     desc: vet and test
-    cmds: [go vet ./..., go test ./...]
+    cmds:
+      - go vet ./...
+      - go test ./...
 
   release:
     desc: "release: task release -- patch|minor|major|vX.Y.Z (DRY_RUN=1 to check only)"
-    cmds: [scripts/release.sh {{.CLI_ARGS}}]
+    cmds:
+      - scripts/release.sh {{.CLI_ARGS}}
