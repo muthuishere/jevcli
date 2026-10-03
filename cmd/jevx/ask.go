@@ -266,6 +266,7 @@ func cmdAsk(args []string) {
 	memName := fs.String("memory", "", "a jevx memory: append its best-matching notes after the item (jevx memory list)")
 	memK := fs.Int("memory-k", 3, "with --memory: BM25 sections after named and pinned pages")
 	memBudget := fs.Int("memory-budget", 2000, "with --memory: characters of notes")
+	memStrict := fs.Bool("memory-strict", false, "with --memory: a number, `code` or name in the input that the retrieved notes lack makes a yes/no answer no")
 	var nouls, choices, scores, ctxs multi
 	fs.Var(&ctxs, "context", "background for this call: TEXT or @file (repeat); added after the ## Jev sections")
 	fs.BoolVar(&core.NoContext, "no-context", false, "skip the ## Jev sections of the global and folder agent files")
@@ -307,7 +308,7 @@ func cmdAsk(args []string) {
 		if err != nil {
 			die("%v", err)
 		}
-		mem = &memAsk{m: m, k: *memK, budget: *memBudget}
+		mem = &memAsk{m: m, k: *memK, budget: *memBudget, strict: *memStrict}
 	}
 	core.Retries, core.LedgerOn = *set.Retries, *set.Ledger
 
@@ -371,7 +372,7 @@ func cmdAsk(args []string) {
 	if err != nil {
 		die("input: %v", err)
 	}
-	state, hits := mem.apply(state)
+	state, hits, diff := mem.apply(state)
 	ans, model, err := askChunks(p, cfg.WithContext(p, state, callCtx(ctxs)...), qs, set)
 	if errors.Is(err, core.ErrNeedKey) {
 		die("%s", core.NeedKeyHelp(name, p))
@@ -382,7 +383,7 @@ func cmdAsk(args []string) {
 	if *raw {
 		out := map[string]any{"model": model, "answers": ans}
 		if mem != nil {
-			out["memory"] = hits
+			out["memory"], out["memory_diff"] = hits, diff
 		}
 		b, _ := json.MarshalIndent(out, "", "  ")
 		pr("%s", b)
@@ -390,7 +391,7 @@ func cmdAsk(args []string) {
 	}
 	code, rows := 0, map[string]any{}
 	for _, k := range keys(qs) {
-		v := verdict(qs[k], ans[k], set)
+		v := mem.strictVerdict(qs[k], verdict(qs[k], ans[k], set), diff)
 		switch {
 		case v == "unsure":
 			code = 3
@@ -408,7 +409,7 @@ func cmdAsk(args []string) {
 	if *asJSON {
 		out := map[string]any{"profile": name, "model": model, "answers": rows}
 		if mem != nil {
-			out["memory"] = hits
+			out["memory"], out["memory_diff"] = hits, diff
 		}
 		b, _ := json.Marshal(out)
 		pr("%s", b)
@@ -424,6 +425,7 @@ func batch(cfg core.Config, p core.Profile, qs map[string]core.Question, set cor
 		Input   string         `json:"input"`
 		Answers map[string]any `json:"answers,omitempty"`
 		Memory  []core.MemHit  `json:"memory,omitempty"`
+		Diff    []string       `json:"memory_diff,omitempty"`
 		Error   string         `json:"error,omitempty"`
 	}
 	rows := make([]row, len(inputs))
@@ -438,7 +440,7 @@ func batch(cfg core.Config, p core.Profile, qs map[string]core.Question, set cor
 			state, err := normState(l)
 			var ans map[string]core.Answer
 			if err == nil {
-				state, rows[i].Memory = mem.apply(state)
+				state, rows[i].Memory, rows[i].Diff = mem.apply(state)
 				ans, _, err = askChunks(p, cfg.WithContext(p, state, extra...), qs, set)
 			}
 			if errors.Is(err, core.ErrNeedKey) {
@@ -450,7 +452,7 @@ func batch(cfg core.Config, p core.Profile, qs map[string]core.Question, set cor
 			}
 			rows[i].Answers = map[string]any{}
 			for k, a := range ans {
-				rows[i].Answers[k] = map[string]any{"verdict": verdict(qs[k], a, set), "p": round2(value(a)), "answer": a}
+				rows[i].Answers[k] = map[string]any{"verdict": mem.strictVerdict(qs[k], verdict(qs[k], a, set), rows[i].Diff), "p": round2(value(a)), "answer": a}
 			}
 		}()
 	}

@@ -251,6 +251,26 @@ func (m *Memory) citeHash(c MemCite) (string, string) {
 	return sum([]byte(strings.Join(ls[c.From-1:c.To], "\n"))), ""
 }
 
+// citeMoved is true when the cited lines still exist, unchanged, somewhere else in the file (lines were inserted or
+// removed above them): the fact is still there, only its line numbers moved.
+func (m *Memory) citeMoved(c MemCite) bool {
+	root, ok := m.Repos[c.Repo]
+	if !ok || c.Hash == "" {
+		return false
+	}
+	b, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(c.Path)))
+	if err != nil {
+		return false
+	}
+	ls, n := strings.Split(string(b), "\n"), c.To-c.From+1
+	for i := 0; i+n <= len(ls); i++ {
+		if sum([]byte(strings.Join(ls[i:i+n], "\n"))) == c.Hash {
+			return true
+		}
+	}
+	return false
+}
+
 func sum(b []byte) string { h := sha256.Sum256(b); return hex.EncodeToString(h[:8]) }
 
 // Check marks a page stale when the page itself changed since `index`, or when any line range it cites changed in
@@ -273,7 +293,7 @@ func (m *Memory) Check() map[string]string {
 			if c.Hash == "" {
 				continue
 			}
-			if now, _ := m.citeHash(c); now != c.Hash {
+			if now, _ := m.citeHash(c); now != c.Hash && !m.citeMoved(c) {
 				stale[page] = fmt.Sprintf("cited %s:%s:%d-%d changed", c.Repo, c.Path, c.From, c.To)
 				break
 			}
@@ -450,11 +470,11 @@ func (m *Memory) Retrieve(input string, k, budget int) []MemHit {
 	for _, i := range order {
 		s := live[i]
 		chunk := []rune(fmt.Sprintf("[%s#%s] %s", s.Page, s.Head, s.Text)) // the budget counts runes, like MaxContextChars
-		if used+len(chunk) > budget {
+		if used+len(chunk) > budget {                                      // a cut chunk must still say something; a short whole section is kept as it is
 			chunk = chunk[:max(0, budget-used)]
-		}
-		if len(chunk) < 80 {
-			break
+			if len(chunk) < 80 {
+				break
+			}
 		}
 		hits = append(hits, MemHit{Page: s.Page, Head: s.Head, Lines: fmt.Sprintf("L%d-L%d", s.Start, s.End),
 			Score: math.Round(scores[i]*1000) / 1000, Why: why[i], text: string(chunk)})
@@ -507,4 +527,76 @@ func MemoryState(item string, hits []MemHit) string {
 		return body + `"memory":` + string(nb) + "}"
 	}
 	return item + "\n\nRelevant notes (memory):\n" + strings.Join(notes, "\n")
+}
+
+var (
+	diffNum  = regexp.MustCompile(`\d+(?:[.,]\d+)*`)
+	diffCode = regexp.MustCompile("`([^`]+)`")
+	diffName = regexp.MustCompile(`\b(?:[A-Za-z]*[a-z][A-Z][A-Za-z0-9]*|[A-Z][A-Za-z]*\d[A-Za-z0-9]*|[A-Z]{2,}[0-9]*)\b`)
+)
+
+// MemDiff lists the facts in the item that the retrieved notes do not contain: numbers (versions, ports, 1,024),
+// `code spans` and name-like tokens (ModernBERT, Qwen3, A100, MIT). It only judges when the notes are about the item
+// (at least 2 shared content terms); otherwise it returns nothing, because a missing fact proves nothing about notes
+// that are off-topic. With --memory-strict, any listed fact makes a yes/no answer "no".
+func MemDiff(item string, hits []MemHit) []string {
+	if len(hits) == 0 {
+		return nil
+	}
+	var notes strings.Builder
+	for _, h := range hits {
+		notes.WriteString(h.text)
+		notes.WriteString("\n")
+	}
+	n := notes.String()
+	nl := strings.ToLower(n)
+	nt := map[string]bool{}
+	for _, t := range MemTokens(n) {
+		nt[t] = true
+	}
+	shared := 0
+	for t := range uniq(MemTokens(item)) {
+		if nt[t] {
+			shared++
+		}
+	}
+	if shared < 2 {
+		return nil
+	}
+	nums := map[string]bool{}
+	for _, x := range diffNum.FindAllString(n, -1) {
+		nums[strings.ReplaceAll(x, ",", "")] = true
+	}
+	var out []string
+	seen := map[string]bool{}
+	miss := func(kind, v string) {
+		if !seen[kind+v] {
+			seen[kind+v] = true
+			out = append(out, kind+" "+v+" is not in the notes")
+		}
+	}
+	for _, x := range diffNum.FindAllString(item, -1) {
+		if v := strings.TrimRight(strings.ReplaceAll(x, ",", ""), "."); !nums[v] {
+			miss("number", x)
+		}
+	}
+	for _, m := range diffCode.FindAllStringSubmatch(item, -1) {
+		if !strings.Contains(nl, strings.ToLower(m[1])) {
+			miss("code", "`"+m[1]+"`")
+		}
+	}
+	for _, x := range diffName.FindAllString(item, -1) {
+		if !strings.Contains(nl, strings.ToLower(x)) {
+			miss("name", x)
+		}
+	}
+	return out
+}
+
+func uniq(xs []string) map[string]bool {
+	m := map[string]bool{}
+	for _, x := range xs {
+		m[x] = true
+	}
+	return m
 }

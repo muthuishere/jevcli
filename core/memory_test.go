@@ -244,3 +244,58 @@ func TestUnverifiableAndEscapingCites(t *testing.T) {
 		t.Fatalf("unverifiable is reported, not stale: %v", s)
 	}
 }
+
+// The diff rule: a number, `code` or name in the item that the relevant notes lack is reported; the true claim is not.
+func TestMemDiffCatchesMutants(t *testing.T) {
+	m, _ := testMemory(t)
+	for _, c := range []struct {
+		item string
+		want string // "" = no diff
+	}{
+		{"Claim: 21118 is the default port.", ""},
+		{"Claim: 21181 is the default port.", "number 21181"},
+		{"Claim: the default port is 21,118.", ""}, // a thousands comma is the same number
+		{"Claim: the licence is Apache-2.0, not MIT.", ""},
+		{"Claim: the licence is BSD, not Apache.", "name BSD"},
+		// Known limit: the rule checks presence, not negation. The notes say "Apache-2.0, not MIT", so "the licence is
+		// MIT" passes the rule; that claim is the model's to judge.
+		{"Claim: the licence is MIT.", ""},
+		{"Claim: run `task build` for the default port 21118.", "code `task build`"},
+		{"Claim: boil pasta for 20 minutes.", ""}, // off-topic notes: the rule abstains
+	} {
+		d := MemDiff(c.item, m.Retrieve(c.item, 1, 2000))
+		got := strings.Join(d, "; ")
+		if (c.want == "") != (len(d) == 0) || !strings.Contains(got, c.want) {
+			t.Fatalf("%q: diff %q, want %q", c.item, got, c.want)
+		}
+	}
+	if MemDiff("Claim: port 21181", nil) != nil {
+		t.Fatal("no notes: no verdict")
+	}
+}
+
+// A short section is retrievable whole; only a budget-cut tail needs 80 runes to be worth sending.
+func TestShortSectionIsRetrieved(t *testing.T) {
+	m, _ := testMemory(t)
+	hits := m.Retrieve("What licence, Apache or MIT?", 1, 2000)
+	found := false
+	for _, h := range hits {
+		found = found || (h.Page == "faq.md" && h.Head == "Licence")
+	}
+	if !found {
+		t.Fatalf("the one-line Licence section must be retrievable: %+v", hits)
+	}
+}
+
+// Lines inserted above a cite move it, they do not make it stale; a changed cited line still does.
+func TestMovedCiteIsNotStale(t *testing.T) {
+	m, repo := testMemory(t)
+	writeFile(t, filepath.Join(repo, "README.md"), "new intro\nmore intro\nline one\nDefault port: 21118\nline three\n")
+	if s := m.Check(); len(s) != 0 {
+		t.Fatalf("moved, not stale: %v", s)
+	}
+	writeFile(t, filepath.Join(repo, "README.md"), "new intro\nline one\nDefault port: 21200\n")
+	if s := m.Check(); !strings.Contains(s["faq.md"], "changed") {
+		t.Fatalf("changed is stale: %v", s)
+	}
+}
