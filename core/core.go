@@ -532,7 +532,12 @@ func LocalQuestions() map[string]Question {
 // NoContext skips the standing context (the global and folder "## Jev" sections) for this process: --no-context.
 var NoContext bool
 
-// WithContext puts the context in front of the state: the global section, the folder section, then the per-call extra.
+// MaxContextChars caps the standing + per-call context added to a state (~1k tokens), so it can never crowd the item out.
+const MaxContextChars = 4000
+
+// WithContext adds the context AFTER the state: the global section, the folder section, then the per-call extra.
+// The item being judged always comes first, because the server keeps only the first max_len tokens (openjevx: 1024);
+// context in front of it could push the item out of the model's view (jevresearch, 2026-10-03).
 func (c Config) WithContext(p Profile, state string, extra ...string) string {
 	var parts []string
 	if !NoContext {
@@ -551,17 +556,39 @@ func (c Config) WithContext(p Profile, state string, extra ...string) string {
 		return state
 	}
 	ctx := strings.Join(parts, "\n")
-	// A JSON state keeps its structure: the context goes in as a "context" field (an existing one is kept first).
+	// A JSON state keeps its structure: the context goes in as the LAST field (an existing one is kept first).
+	trimmed := strings.TrimSpace(state)
 	var obj map[string]any
-	if strings.HasPrefix(strings.TrimSpace(state), "{") && json.Unmarshal([]byte(state), &obj) == nil {
-		if old, ok := obj["context"].(string); ok && old != "" {
+	if strings.HasPrefix(trimmed, "{") && json.Unmarshal([]byte(trimmed), &obj) == nil {
+		old, hasOld := obj["context"].(string)
+		if hasOld && old != "" {
 			ctx = ctx + "\n" + old
 		}
-		obj["context"] = ctx
+		cb, _ := json.Marshal(capContext(ctx))
+		if _, exists := obj["context"]; !exists && strings.HasSuffix(trimmed, "}") {
+			body := strings.TrimSpace(strings.TrimSuffix(trimmed, "}"))
+			sep := ","
+			if strings.HasSuffix(body, "{") {
+				sep = ""
+			}
+			return body + sep + `"context":` + string(cb) + "}" // original fields, in their original order, first
+		}
+		delete(obj, "context") // rare: the state carried its own context; re-emit it with the merged one last
 		b, _ := json.Marshal(obj)
-		return string(b)
+		body := strings.TrimSuffix(string(b), "}")
+		if body != "{" {
+			body += ","
+		}
+		return body + `"context":` + string(cb) + "}"
 	}
-	return "Context: " + ctx + "\n\n" + state
+	return state + "\n\nContext: " + capContext(ctx)
+}
+
+func capContext(ctx string) string {
+	if r := []rune(ctx); len(r) > MaxContextChars {
+		return string(r[:MaxContextChars]) + " …[context cut]"
+	}
+	return ctx
 }
 
 // ---------------------------------------------------------------- System One client

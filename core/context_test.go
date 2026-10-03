@@ -1,6 +1,7 @@
 package core
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -24,14 +25,14 @@ func TestWithContext(t *testing.T) {
 	_ = os.Chdir(sub)
 
 	c := Config{}
-	if got := c.WithContext(Profile{}, "the text", "call"); got != "Context: global\nfolder\nclaude only\ncall\n\nthe text" {
+	if got := c.WithContext(Profile{}, "the text", "call"); got != "the text\n\nContext: global\nfolder\nclaude only\ncall" {
 		t.Fatalf("text state: %q", got)
 	}
-	if got := c.WithContext(Profile{}, `{"message":"hi","context":"own"}`); got != `{"context":"global\nfolder\nclaude only\nown","message":"hi"}` {
+	if got := c.WithContext(Profile{}, `{"message":"hi","context":"own"}`); got != `{"message":"hi","context":"global\nfolder\nclaude only\nown"}` {
 		t.Fatalf("JSON state must stay JSON with a merged context field: %q", got)
 	}
 	NoContext = true
-	if got := c.WithContext(Profile{}, "x", "call"); got != "Context: call\n\nx" {
+	if got := c.WithContext(Profile{}, "x", "call"); got != "x\n\nContext: call" {
 		t.Fatalf("--no-context keeps only the call's context: %q", got)
 	}
 	if got := c.WithContext(Profile{}, "x"); got != "x" {
@@ -39,5 +40,28 @@ func TestWithContext(t *testing.T) {
 	}
 	if w := (Question{Instructions: "Q?", Context: "bg"}).Wire()["instructions"]; !strings.HasPrefix(w.(string), "Context: bg\n") {
 		t.Fatalf("question context: %q", w)
+	}
+}
+
+// The item being judged must survive an over-long context: it comes first, and the context is capped.
+func TestLongContextNeverPushesTheItemOut(t *testing.T) {
+	NoContext = true
+	defer func() { NoContext = false }()
+	long := strings.Repeat("background sentence about the project. ", 2000) // ~78k chars
+	item := "ITEM-UNDER-JUDGEMENT: is this reply on topic?"
+	for _, state := range []string{item, `{"text":"` + item + `","lang":"en"}`} {
+		got := Config{}.WithContext(Profile{}, state, long)
+		if i := strings.Index(got, "ITEM-UNDER-JUDGEMENT"); i < 0 || i > 20 {
+			t.Fatalf("item not at the front (index %d) of %.80q", i, got)
+		}
+		if len(got) > len(state)+MaxContextChars+100 {
+			t.Fatalf("context not capped: %d chars", len(got))
+		}
+		if strings.HasPrefix(state, "{") {
+			var m map[string]any
+			if err := json.Unmarshal([]byte(got), &m); err != nil || m["text"] != item || m["lang"] != "en" {
+				t.Fatalf("JSON state broken: %v %v", err, m)
+			}
+		}
 	}
 }
