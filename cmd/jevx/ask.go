@@ -263,6 +263,9 @@ func cmdAsk(args []string) {
 	no := fs.Float64("no", -1, "override: noul P at or below is no (default from `jevx defaults`)")
 	minC := fs.Float64("min", -1, "override: choice / score confidence below is unsure (default from `jevx defaults`)")
 	par := fs.Int("parallel", 0, "override: concurrent requests in a batch")
+	memName := fs.String("memory", "", "a jevx memory: append its best-matching notes after the item (jevx memory list)")
+	memK := fs.Int("memory-k", 3, "with --memory: BM25 sections after named and pinned pages")
+	memBudget := fs.Int("memory-budget", 2000, "with --memory: characters of notes")
 	var nouls, choices, scores, ctxs multi
 	fs.Var(&ctxs, "context", "background for this call: TEXT or @file (repeat); added after the ## Jev sections")
 	fs.BoolVar(&core.NoContext, "no-context", false, "skip the ## Jev sections of the global and folder agent files")
@@ -297,6 +300,14 @@ func cmdAsk(args []string) {
 	}
 	if *par > 0 {
 		set.Parallel = par
+	}
+	var mem *memAsk
+	if *memName != "" {
+		m, err := core.LoadMemory(*memName)
+		if err != nil {
+			die("%v", err)
+		}
+		mem = &memAsk{m: m, k: *memK, budget: *memBudget}
 	}
 	core.Retries, core.LedgerOn = *set.Retries, *set.Ledger
 
@@ -348,7 +359,7 @@ func cmdAsk(args []string) {
 			}
 			inputs, nums = append(inputs, l), append(nums, i+1)
 		}
-		os.Exit(batch(cfg, p, qs, set, inputs, nums, callCtx(ctxs)))
+		os.Exit(batch(cfg, p, qs, set, inputs, nums, callCtx(ctxs), mem))
 	}
 
 	// One input.
@@ -360,6 +371,7 @@ func cmdAsk(args []string) {
 	if err != nil {
 		die("input: %v", err)
 	}
+	state, hits := mem.apply(state)
 	ans, model, err := askChunks(p, cfg.WithContext(p, state, callCtx(ctxs)...), qs, set)
 	if errors.Is(err, core.ErrNeedKey) {
 		die("%s", core.NeedKeyHelp(name, p))
@@ -368,7 +380,11 @@ func cmdAsk(args []string) {
 		die("%v", err)
 	}
 	if *raw {
-		b, _ := json.MarshalIndent(map[string]any{"model": model, "answers": ans}, "", "  ")
+		out := map[string]any{"model": model, "answers": ans}
+		if mem != nil {
+			out["memory"] = hits
+		}
+		b, _ := json.MarshalIndent(out, "", "  ")
 		pr("%s", b)
 		return
 	}
@@ -390,7 +406,11 @@ func cmdAsk(args []string) {
 		}
 	}
 	if *asJSON {
-		b, _ := json.Marshal(map[string]any{"profile": name, "model": model, "answers": rows})
+		out := map[string]any{"profile": name, "model": model, "answers": rows}
+		if mem != nil {
+			out["memory"] = hits
+		}
+		b, _ := json.Marshal(out)
 		pr("%s", b)
 	}
 	os.Exit(code)
@@ -398,11 +418,12 @@ func cmdAsk(args []string) {
 
 // batch asks every question of every input, set.Parallel at a time, and prints a readable table (--raw: one JSONL line per input) in input
 // order. A failed input prints its error and the rest go on; it returns 4 if any failed.
-func batch(cfg core.Config, p core.Profile, qs map[string]core.Question, set core.Settings, inputs []string, nums []int, extra []string) int {
+func batch(cfg core.Config, p core.Profile, qs map[string]core.Question, set core.Settings, inputs []string, nums []int, extra []string, mem *memAsk) int {
 	type row struct {
 		Line    int            `json:"line"`
 		Input   string         `json:"input"`
 		Answers map[string]any `json:"answers,omitempty"`
+		Memory  []core.MemHit  `json:"memory,omitempty"`
 		Error   string         `json:"error,omitempty"`
 	}
 	rows := make([]row, len(inputs))
@@ -417,6 +438,7 @@ func batch(cfg core.Config, p core.Profile, qs map[string]core.Question, set cor
 			state, err := normState(l)
 			var ans map[string]core.Answer
 			if err == nil {
+				state, rows[i].Memory = mem.apply(state)
 				ans, _, err = askChunks(p, cfg.WithContext(p, state, extra...), qs, set)
 			}
 			if errors.Is(err, core.ErrNeedKey) {
@@ -771,7 +793,7 @@ func cmdContext(args []string) {
 // Input: stdin, --in, --lines or --states, as for ask. filter / rank read lines from stdin when none is given.
 func cmdVerb(verb string, args []string) {
 	valued := map[string]bool{"in": true, "lines": true, "states": true, "questions": true, "profile": true, "yes": true,
-		"no": true, "min": true, "parallel": true, "context": true, "top": true}
+		"no": true, "min": true, "parallel": true, "context": true, "top": true, "memory": true, "memory-k": true, "memory-budget": true}
 	var pos, flags []string
 	for i := 0; i < len(args); i++ {
 		a := args[i]
