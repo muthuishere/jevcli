@@ -45,15 +45,16 @@ type MemCite struct {
 
 // Memory is a registered folder and its index.
 type Memory struct {
-	Name     string               `json:"name"`
-	Dir      string               `json:"dir"`
-	Pins     []string             `json:"pins,omitempty"`  // pages always offered first (e.g. notices.md)
-	Repos    map[string]string    `json:"repos,omitempty"` // repo name in [[repo:path:lines]] -> local checkout, for `check`
-	Indexed  time.Time            `json:"indexed"`
-	Sections []MemSection         `json:"sections"`
-	Cites    map[string][]MemCite `json:"cites,omitempty"` // page -> its citations
-	Stale    map[string]string    `json:"stale,omitempty"` // page -> why; stale pages are not retrieved
-	PageHash map[string]string    `json:"page_hash,omitempty"`
+	Name         string               `json:"name"`
+	Dir          string               `json:"dir"`
+	Pins         []string             `json:"pins,omitempty"`  // pages always offered first (e.g. notices.md)
+	Repos        map[string]string    `json:"repos,omitempty"` // repo name in [[repo:path:lines]] -> local checkout, for `check`
+	Indexed      time.Time            `json:"indexed"`
+	Sections     []MemSection         `json:"sections"`
+	Cites        map[string][]MemCite `json:"cites,omitempty"`        // page -> its citations
+	Stale        map[string]string    `json:"stale,omitempty"`        // page -> why; stale pages are not retrieved
+	Unverifiable map[string][]string  `json:"unverifiable,omitempty"` // page -> cites that could not be read at index time
+	PageHash     map[string]string    `json:"page_hash,omitempty"`
 }
 
 // MemHit is one retrieved section, as reported in --json / --raw.
@@ -179,7 +180,7 @@ func Sections(page, md string, maxc int) []MemSection {
 // IndexMemory (re)builds the index from the folder: sections, page hashes and the hash of every cited line range.
 func (m *Memory) Index() error {
 	var secs []MemSection
-	cites, hashes := map[string][]MemCite{}, map[string]string{}
+	cites, hashes, unver := map[string][]MemCite{}, map[string]string{}, map[string][]string{}
 	err := filepath.WalkDir(m.Dir, func(p string, d os.DirEntry, err error) error {
 		if err != nil || d.IsDir() || !strings.HasSuffix(p, ".md") {
 			return err
@@ -193,7 +194,12 @@ func (m *Memory) Index() error {
 		secs = append(secs, Sections(rel, string(b), 900)...)
 		hashes[rel] = sum(b)
 		for _, c := range parseCites(string(b)) {
-			c.Hash = m.citeHash(c)
+			h, problem := m.citeHash(c)
+			if problem != "" { // never stored as a hash: a cite we could not read must not look verified later
+				unver[rel] = append(unver[rel], fmt.Sprintf("%s:%s:%d-%d %s", c.Repo, c.Path, c.From, c.To, problem))
+				h = ""
+			}
+			c.Hash = h
 			cites[rel] = append(cites[rel], c)
 		}
 		return nil
@@ -201,7 +207,7 @@ func (m *Memory) Index() error {
 	if err != nil {
 		return err
 	}
-	m.Sections, m.Cites, m.PageHash, m.Stale, m.Indexed = secs, cites, hashes, nil, time.Now().UTC()
+	m.Sections, m.Cites, m.PageHash, m.Stale, m.Unverifiable, m.Indexed = secs, cites, hashes, nil, unver, time.Now().UTC()
 	return nil
 }
 
@@ -223,21 +229,26 @@ func parseCites(md string) []MemCite {
 	return out
 }
 
-// citeHash hashes the cited lines in the repo checkout, or "" when the repo is not configured or unreadable.
-func (m *Memory) citeHash(c MemCite) string {
+// citeHash hashes the cited lines in the repo checkout. It returns ("", "") when the repo is not configured (nothing to
+// check), and a problem instead of a hash when the path leaves the repo root, is missing, or the range is out of bounds.
+func (m *Memory) citeHash(c MemCite) (string, string) {
 	root, ok := m.Repos[c.Repo]
 	if !ok {
-		return ""
+		return "", ""
 	}
-	b, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(c.Path)))
+	full := filepath.Join(root, filepath.FromSlash(c.Path))
+	if rel, err := filepath.Rel(root, full); err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", "escapes the repo root"
+	}
+	b, err := os.ReadFile(full)
 	if err != nil {
-		return "missing"
+		return "", "missing"
 	}
 	ls := strings.Split(string(b), "\n")
 	if c.From < 1 || c.To > len(ls) || c.From > c.To {
-		return "out-of-range"
+		return "", "out of range"
 	}
-	return sum([]byte(strings.Join(ls[c.From-1:c.To], "\n")))
+	return sum([]byte(strings.Join(ls[c.From-1:c.To], "\n"))), ""
 }
 
 func sum(b []byte) string { h := sha256.Sum256(b); return hex.EncodeToString(h[:8]) }
@@ -262,7 +273,7 @@ func (m *Memory) Check() map[string]string {
 			if c.Hash == "" {
 				continue
 			}
-			if now := m.citeHash(c); now != c.Hash {
+			if now, _ := m.citeHash(c); now != c.Hash {
 				stale[page] = fmt.Sprintf("cited %s:%s:%d-%d changed", c.Repo, c.Path, c.From, c.To)
 				break
 			}
@@ -410,7 +421,8 @@ func (m *Memory) Retrieve(input string, k, budget int) []MemHit {
 	var named []string
 	for p := range pages {
 		stem := strings.ToLower(strings.TrimSuffix(filepath.Base(p), ".md"))
-		if toks[stem] || toks[strings.SplitN(stem, "-", 2)[0]] {
+		first := strings.SplitN(stem, "-", 2)[0] // "marketing-team.md" is named by "marketing"; a short first part ("go-", "how-") is not enough
+		if toks[stem] || (len([]rune(first)) >= 4 && toks[first]) {
 			named = append(named, p)
 		}
 	}
@@ -437,7 +449,7 @@ func (m *Memory) Retrieve(input string, k, budget int) []MemHit {
 	used := 0
 	for _, i := range order {
 		s := live[i]
-		chunk := fmt.Sprintf("[%s#%s] %s", s.Page, s.Head, s.Text)
+		chunk := []rune(fmt.Sprintf("[%s#%s] %s", s.Page, s.Head, s.Text)) // the budget counts runes, like MaxContextChars
 		if used+len(chunk) > budget {
 			chunk = chunk[:max(0, budget-used)]
 		}
@@ -445,7 +457,7 @@ func (m *Memory) Retrieve(input string, k, budget int) []MemHit {
 			break
 		}
 		hits = append(hits, MemHit{Page: s.Page, Head: s.Head, Lines: fmt.Sprintf("L%d-L%d", s.Start, s.End),
-			Score: math.Round(scores[i]*1000) / 1000, Why: why[i], text: chunk})
+			Score: math.Round(scores[i]*1000) / 1000, Why: why[i], text: string(chunk)})
 		used += len(chunk) + 1
 	}
 	return hits
@@ -465,8 +477,10 @@ func MemoryState(item string, hits []MemHit) string {
 	trimmed := strings.TrimSpace(item)
 	var obj map[string]any
 	if strings.HasPrefix(trimmed, "{") && strings.HasSuffix(trimmed, "}") && json.Unmarshal([]byte(trimmed), &obj) == nil {
-		if _, taken := obj["memory"]; !taken {
-			nb, _ := json.Marshal(strings.Join(notes, "\n"))
+		merged := strings.Join(notes, "\n")
+		raw, taken := obj["memory"]
+		if !taken {
+			nb, _ := json.Marshal(merged)
 			body := strings.TrimSpace(strings.TrimSuffix(trimmed, "}"))
 			sep := ","
 			if strings.HasSuffix(body, "{") {
@@ -474,6 +488,23 @@ func MemoryState(item string, hits []MemHit) string {
 			}
 			return body + sep + `"memory":` + string(nb) + "}"
 		}
+		// rare: the state carried its own memory; merge (new notes first, the old after) and re-emit it as the last field
+		if old, ok := raw.(string); ok {
+			if old != "" {
+				merged += "\n" + old
+			}
+		} else if raw != nil {
+			ob, _ := json.Marshal(raw)
+			merged += "\n" + string(ob)
+		}
+		delete(obj, "memory")
+		b, _ := json.Marshal(obj)
+		body := strings.TrimSuffix(string(b), "}")
+		if body != "{" {
+			body += ","
+		}
+		nb, _ := json.Marshal(merged)
+		return body + `"memory":` + string(nb) + "}"
 	}
 	return item + "\n\nRelevant notes (memory):\n" + strings.Join(notes, "\n")
 }

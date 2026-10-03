@@ -77,7 +77,9 @@ func cmdMemory(args []string) {
 		for _, p := range pages {
 			pr("stale  %-32s %s", p, stale[p])
 		}
-		pr("%d of %d pages stale; stale pages are left out of retrieval until fixed and re-indexed", len(stale), len(m.PageHash))
+		printUnverifiable(m)
+		pr("%d of %d pages stale; stale pages are left out of retrieval until fixed and re-indexed; %d pages have unverifiable cites",
+			len(stale), len(m.PageHash), len(m.Unverifiable))
 		if len(stale) > 0 {
 			os.Exit(1)
 		}
@@ -130,6 +132,21 @@ func indexAndSave(m *core.Memory) {
 		cites += len(cs)
 	}
 	pr("memory %s: %d sections from %d pages, %d citations, %s", m.Name, len(m.Sections), len(m.PageHash), cites, m.Dir)
+	printUnverifiable(m)
+}
+
+// printUnverifiable warns about cites that could not be read at index time: check cannot vouch for those pages.
+func printUnverifiable(m *core.Memory) {
+	pages := make([]string, 0, len(m.Unverifiable))
+	for p := range m.Unverifiable {
+		pages = append(pages, p)
+	}
+	sort.Strings(pages)
+	for _, p := range pages {
+		for _, c := range m.Unverifiable[p] {
+			pr("warning: %s cites %s; check cannot verify it", p, c)
+		}
+	}
 }
 
 // memAsk is the memory an ask carries (nil: none).

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func writeFile(t *testing.T, path, body string) {
@@ -155,5 +156,91 @@ func TestSaveLoadAndNames(t *testing.T) {
 	}
 	if ls := ListMemories(); len(ls) != 1 || ls[0] != "t" {
 		t.Fatalf("list: %v", ls)
+	}
+}
+
+// refactor review 2378dc2, blocker 1: a JSON state that already has "memory" must stay valid JSON.
+func TestJSONStateWithAMemoryFieldStaysJSON(t *testing.T) {
+	m, _ := testMemory(t)
+	hits := m.Retrieve("Which port does the server use?", 1, 2000)
+	for _, in := range []string{`{"claim":"port","memory":"old note"}`, `{"memory":["a"],"claim":"port"}`, `{"memory":"","x":1}`} {
+		out := MemoryState(in, hits)
+		var obj map[string]any
+		if err := json.Unmarshal([]byte(out), &obj); err != nil {
+			t.Fatalf("%s -> invalid JSON: %v\n%s", in, err, out)
+		}
+		mem, _ := obj["memory"].(string)
+		if !strings.HasSuffix(out, `}`) || !strings.Contains(mem, "[faq.md#") || !strings.HasPrefix(mem, "[") {
+			t.Fatalf("new notes first in the merged memory field: %s", out)
+		}
+		if strings.Contains(in, "old note") && !strings.HasSuffix(mem, "old note") {
+			t.Fatalf("the old memory is kept after the new notes: %q", mem)
+		}
+		if strings.Index(out, `"memory"`) < strings.Index(out, `"claim"`) && strings.Contains(in, "claim") {
+			t.Fatalf("memory is the last field: %s", out)
+		}
+	}
+}
+
+// refactor review 2378dc2, blocker 2: the budget cut must not split a rune, and counts runes.
+func TestBudgetCutIsRuneSafe(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "tamil.md"), "# āāā\n\n"+strings.Repeat("ā சொல் word ", 80)+"\n")
+	m := &Memory{Name: "u", Dir: dir}
+	if err := m.Index(); err != nil {
+		t.Fatal(err)
+	}
+	for budget := 90; budget < 140; budget++ {
+		for _, h := range m.Retrieve("word ā", 3, budget) {
+			if !utf8.ValidString(h.text) || utf8.RuneCountInString(h.text) > budget {
+				t.Fatalf("budget %d: valid=%v runes=%d", budget, utf8.ValidString(h.text), utf8.RuneCountInString(h.text))
+			}
+		}
+	}
+}
+
+// should-fix 3: a short first stem segment does not name a page.
+func TestShortStemSegmentDoesNotNameAPage(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "go-generics.md"), "# Generics\n\nType parameters arrived in Go 1.18; constraints are interfaces, and the compiler instantiates generic code per shape.\n")
+	writeFile(t, filepath.Join(dir, "marketing-team.md"), "# Mission: marketing\n\nPost the approved pack, never on its own schedule.\n")
+	m := &Memory{Name: "n", Dir: dir}
+	_ = m.Index()
+	for _, h := range m.Retrieve("how do I go to the shop", 0, 2000) {
+		if h.Why == "named" {
+			t.Fatalf("'go' must not name go-generics.md: %+v", h)
+		}
+	}
+	if h := m.Retrieve("marketing: no output since 10:33", 0, 2000); len(h) != 1 || h[0].Page != "marketing-team.md" || h[0].Why != "named" {
+		t.Fatalf("a 4+ letter first segment still names its page: %+v", h)
+	}
+}
+
+// should-fix 4 and 5: unreadable or escaping cites are reported, never stored as a hash.
+func TestUnverifiableAndEscapingCites(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	dir, repo := t.TempDir(), t.TempDir()
+	writeFile(t, filepath.Join(repo, "a.txt"), "one\ntwo\n")
+	writeFile(t, filepath.Join(filepath.Dir(repo), "secret.txt"), "outside\n")
+	writeFile(t, filepath.Join(dir, "p.md"), "# P\n\nok [[r:a.txt:1-1]] gone [[r:nope.txt:1-1]] far [[r:a.txt:5-9]] up [[r:../secret.txt:1-1]]\n")
+	m := &Memory{Name: "c", Dir: dir, Repos: map[string]string{"r": repo}}
+	if err := m.Index(); err != nil {
+		t.Fatal(err)
+	}
+	u := strings.Join(m.Unverifiable["p.md"], " | ")
+	for _, want := range []string{"nope.txt:1-1 missing", "a.txt:5-9 out of range", "../secret.txt:1-1 escapes the repo root"} {
+		if !strings.Contains(u, want) {
+			t.Fatalf("want %q in %q", want, u)
+		}
+	}
+	for _, c := range m.Cites["p.md"] {
+		if c.Path != "a.txt" && c.Hash != "" {
+			t.Fatalf("an unreadable cite has no hash: %+v", c)
+		}
+	}
+	if s := m.Check(); len(s) != 0 {
+		t.Fatalf("unverifiable is reported, not stale: %v", s)
 	}
 }
