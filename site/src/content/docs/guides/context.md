@@ -21,7 +21,7 @@ $ jevx context
 global           (none)  add a "## Jev" section to one of: /Users/you/.claude/CLAUDE.md, /Users/you/.codex/AGENTS.md, /Users/you/.agents/AGENTS.md, /Users/you/AGENTS.md
 folder           (none)  add a "## Jev" section to this repo's AGENTS.md or CLAUDE.md
 
-order sent: global, folder, then --context on the call; a saved question's own context goes with that question
+order sent: the item first, then global, folder and --context on the call; a saved question's own context goes with that question
 ```
 
 (Paths shortened to `/Users/you`.) With sections present, each line names the file it came from. `--no-context` skips the global and folder layers for one call; `--context` still applies.
@@ -46,7 +46,7 @@ jevx is "Is this a critical bug?" --cwd ~/repos/payments < report.txt    # that 
 jevx is "Is this spam?" --no-context < msg.txt                          # skip the sections
 ```
 
-A text input is sent with the context prepended; a JSON input keeps its shape and gets the context merged into its `"context"` field.
+The item being judged always goes **first** and the context after it (capped at 4000 characters), because a server keeps only its first N tokens: context in front could push the item out of the model's view. A JSON input keeps its shape and gets the context as its last field, `"context"`.
 
 The skill's own example, from the maintainer: the same message scored 0.84 with no context, 0.94 with "the meeting is in 20 minutes" and 0.64 (unsure) with "the meeting is in three months". That one was not re-run for these docs.
 

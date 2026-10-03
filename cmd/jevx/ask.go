@@ -782,7 +782,7 @@ func cmdContext(args []string) {
 			show("question "+k, c, "its saved question")
 		}
 	}
-	pr("\norder sent: global, folder, then --context on the call; a saved question's own context goes with that question")
+	pr("\norder sent: the item first, then global, folder and --context on the call; a saved question's own context goes with that question")
 }
 
 // cmdVerb is the shortcut layer: each verb is one question through cmdAsk, with the same config, context and settings.

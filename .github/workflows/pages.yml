@@ -10,6 +10,7 @@ name: Deploy Pages
 
 on:
   push:
+    tags: ["v*"] # every release rebuilds the site, so the header version and the docs match the release
     branches: [main]
     paths:
       - "site/**"
@@ -39,6 +40,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # tags: the header version is the newest tag (git describe)
 
       - name: Copy installers and skill into the site root
         run: |

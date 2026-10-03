@@ -91,5 +91,6 @@ Nothing more to do. The skill is installed, and Claude Code or Codex loads it wh
 - [Shortcuts](/jevx/guides/shortcuts/): `is`, `pick`, `filter`, `rank`.
 - [Saved questions](/jevx/guides/questions/): write a question once, reuse it by name.
 - [Context](/jevx/guides/context/): tell the model whose decision it is.
+- [Memory](/jevx/guides/memory/): judge claims against your own docs, with `--memory-strict` for changed numbers.
 - [The answer cache](/jevx/reference/privacy/#the-answer-cache): repeat calls are free; `--fresh`, `jevx cache`.
 - [CLI reference](/jevx/reference/cli/): every command on one page.

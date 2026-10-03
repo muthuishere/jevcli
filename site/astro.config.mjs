@@ -2,10 +2,24 @@
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 import starlightLlmsTxt from 'starlight-llms-txt';
+import { execSync } from 'node:child_process';
+
+// The release shown in the header: JEVX_VERSION if set, else the newest tag reachable from this checkout. Never
+// hand-edited, so a rebuild after a release always shows that release.
+const version =
+	process.env.JEVX_VERSION ||
+	(() => {
+		try {
+			return execSync('git describe --tags --abbrev=0 --match "v*"', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
+		} catch {
+			return 'dev';
+		}
+	})();
 
 // Project GitHub Pages: https://muthuishere.github.io/jevx
 // Same stack and house style as the cljgo and toolnexus docs sites.
 export default defineConfig({
+	vite: { define: { __JEVX_VERSION__: JSON.stringify(version) } },
 	site: 'https://muthuishere.github.io',
 	base: '/jevx',
 	integrations: [
@@ -58,6 +72,7 @@ export default defineConfig({
 					label: 'Guides',
 					items: [
 						{ label: 'Agent scenarios', slug: 'guides/scenarios' },
+						{ label: 'Memory', slug: 'guides/memory' },
 						{ label: 'Ask', slug: 'guides/ask' },
 						{ label: 'Shortcuts: is, pick, filter, rank', slug: 'guides/shortcuts' },
 						{ label: 'Saved questions', slug: 'guides/questions' },

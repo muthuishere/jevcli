@@ -1,8 +1,9 @@
 ---
 // SiteTitle override, as on cljgo: the site title plus the CURRENT RELEASE in the header of every page,
-// so a reader can tell which jevx a page describes. The version is hardcoded: bump it when a release is cut.
+// so a reader can tell which jevx a page describes. The version comes from the newest git tag at build time
+// (astro.config.mjs), so every rebuild after a release shows that release.
 import logo from '../assets/logo.svg';
-const VERSION = 'v0.10.0';
+const VERSION = __JEVX_VERSION__;
 const { siteTitle, siteTitleHref } = Astro.locals.starlightRoute;
 ---
 

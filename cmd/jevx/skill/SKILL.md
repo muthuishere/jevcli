@@ -52,6 +52,22 @@ jevx ask --states tickets.jsonl team,sev --parallel 8                # batch ove
   invalid reply). An error is never a "no". On 4, say the call failed; on 3, check it yourself or ask the user. A batch
   exits 0, or 4 if any input failed (that line carries `"error"`).
 
+## Judge against the user's notes: `--memory`
+
+When the question is "is this right per our docs?", point it at a memory (a folder of cited markdown the user
+registered). jevx sends the best-matching sections **after** the item (BM25, no embeddings) and returns the verdict.
+
+```bash
+jevx memory list                                      # what exists; never create one unasked
+jevx memory show docs "does v2 drop the 512-token limit?"   # what would be retrieved, with page#heading and lines
+jevx ask --memory docs --memory-strict --lines claims.txt --noul true="Is this claim correct per the notes?"
+```
+- Measured: notes took a 0.4B local model from AUC 0.30 to 0.86 on 68 held-out claims. The weak spot is a changed
+  number (29 of 40 caught); `--memory-strict` fails a yes/no claim whose number, `code` or name is missing from the
+  notes: 40 of 40 caught, accuracy 75% to 86%, at the cost of 11 instead of 9 of 40 true claims wrongly failed.
+- It adds facts, not reasoning. The strict rule checks presence, not negation ("not MIT" contains MIT).
+- `jevx memory check NAME` marks pages whose cited lines changed as stale; run it (and `index`) after docs change.
+
 ## Repeat calls are free: the answer cache
 
 jevx keeps what the model said, so asking the same thing about the same input again costs nothing and returns in
@@ -116,7 +132,7 @@ current directory unless you pass `--cwd DIR`.
 | `min_confidence` | 0.6 | a choice or score below this is unsure |
 | `parallel` | 8 | concurrent requests in a batch |
 | `retries` / `timeout_s` / `chunk` | 3 / 60 / 32 | tries on 429/5xx, seconds per request, questions per request |
-| `ledger` | true | log each call without content to `~/.local/share/jevx/calls.jsonl` (`jevx stats`) |
+| `ledger` | true | log each call without content to `~/.local/share/jevx/calls.jsonl` (`jevx stats`); a hosted call is scrubbed of secrets, emails and phones first |
 | `cache` / `cache_ttl_days` | true / 7 | reuse a stored answer for the same endpoint, model, input and question; `--fresh` on a call asks again; `jevx cache enable\|disable\|clear` |
 | `accept_min` / `more_max` | 0.35 / 0.65 | legacy Stop hook thresholds (the `stop-judge` plugin has its own condition) |
 

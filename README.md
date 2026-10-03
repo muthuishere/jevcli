@@ -104,6 +104,15 @@ $ jevx ask --lines app.log --noul err="Is this an error?" --parallel 8     # a t
 
 ```markdown
 <!-- AGENTS.md or CLAUDE.md, in your home folder (global) or in a repo (folder) -->
+## Jev
+
+This repo is a payments service; any money-movement bug is critical.
+```
+
+jevx sends the item first, then the global section, the nearest folder's and `--context` on the call (`--no-context` skips the
+sections, `--cwd DIR` picks the folder). `jevx context` shows exactly what is sent and from which file. The same
+"refund issued twice" report went from `unsure 0.74` to `yes 0.93` once the repo's section said money bugs are critical.
+
 ## Memory: judge against your own notes
 
 `jevx memory` points a question at a folder of distilled, cited markdown (a wiki, runbooks, release notes). For each item it
@@ -121,16 +130,10 @@ jevx ask --memory docs --memory-k 3 --memory-budget 2000 --lines claims.txt --no
 **Honest caveat.** On 68 held-out claims (34 true, 34 with one changed number or word), notes lifted a small local model from
 AUC 0.30 to 0.86 and hosted Jev from 0.62 to 0.83 (both significant). It is **weakest at spotting a changed number**: a note
 that matches except for one figure pulls the answer toward "true". Pair it with a number/entity diff rule (compare the figures
-in the item with those in the retrieved note) before trusting a "true".
-
-## Jev
-
-This repo is a payments service; any money-movement bug is critical.
-```
-
-jevx sends the global section, then the nearest folder's, then `--context` on the call (`--no-context` skips the
-sections, `--cwd DIR` picks the folder). `jevx context` shows exactly what is sent and from which file. The same
-"refund issued twice" report went from `unsure 0.74` to `yes 0.93` once the repo's section said money bugs are critical.
+in the item with those in the retrieved note) before trusting a "true". That rule ships as `--memory-strict`: on 80 unseen
+rows it caught 40 of 40 changed numbers (29 without it), accuracy 75% to 86%, at the cost of 11 instead of 9 of 40 true
+claims wrongly failed.
+Docs: [Memory](https://muthuishere.github.io/jevx/guides/memory/).
 
 ## Plugins: judgements at agent events
 

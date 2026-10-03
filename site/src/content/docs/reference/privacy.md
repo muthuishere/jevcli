@@ -15,8 +15,14 @@ description: Exactly what is sent to the endpoint, what is never sent, how keys 
 
 The endpoint is whatever the profile says. A hosted service sees the input and keeps whatever its terms say it keeps; a local model on `127.0.0.1` sees the same and keeps nothing you did not configure. jevx makes no other network calls: no telemetry, no update check.
 
-:::caution[Redaction is your job today]
-The skill tells agents never to put secrets into `--in` or `--proposal`. Redaction before send is on the maintainer's not-done list.
+:::note[Redaction before a hosted call]
+When the profile's endpoint is **hosted** (anything that is not loopback, a private, link-local or CGNAT address, or a `*.local` / `*.internal` name), jevx scrubs the input, context and question text before sending:
+
+- the live value of every environment variable whose name looks secret (`KEY`, `TOKEN`, `SECRET`, `PASSWORD`, `_PW`)
+- well-known token formats (API keys, GitHub, Slack, AWS and Google keys, JWTs), private-key blocks and `user:pass@` URLs
+- email addresses and phone numbers
+
+Each becomes a `[REDACTED:kind]` marker. A local endpoint gets the text unchanged. The ledger records how many items were redacted, never what. Redaction is pattern-based, so the skill still tells agents never to put secrets into `--in` or `--proposal`.
 :::
 
 ## Keys
@@ -29,7 +35,7 @@ With `cache` true (the default), jevx keeps what the model said so the same call
 
 ## The ledger
 
-With `ledger` true (the default), every call appends one line to `~/.local/share/jevx/calls.jsonl`: the host, model, number of questions, a 12-hex-character hash of the question set, latency, token usage and an error message if any. It never holds the input, the question text or a header. `JEVX_LEDGER=off` disables it for a shell.
+With `ledger` true (the default), every call appends one line to `~/.local/share/jevx/calls.jsonl`: the profile, the caller (the calling agent's working directory, or `JEVX_CALLER`), the host, whether it is hosted, the model, number of questions, a 12-hex-character hash of the question set, latency, token usage, how many items were redacted and an error message if any. It never holds the input, the question text or a header. `JEVX_LEDGER=off` disables it for a shell.
 
 ```json title="~/.local/share/jevx/calls.jsonl (one line)"
 {"host":"api.typesafe.ai","model":"jev-1.13.0","ms":673,"qhash":"b4838021a792","questions":1,"ts":"2026-09-27T16:30:24Z","usage":{"input_tokens":281,"output_tokens":20}}

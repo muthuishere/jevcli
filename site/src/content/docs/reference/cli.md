@@ -35,6 +35,7 @@ jevx: usage: jevx rank "QUESTION"|NAME ...  (see: jevx help)
 | `question add\|list\|show\|remove` | named questions, global or `--local` | [Saved questions](/jevx/guides/questions/) |
 | `context` | which `## Jev` sections would be sent, and from which files | [Context](/jevx/guides/context/) |
 | `defaults [show]\|set\|unset` | every setting, its value and where it comes from | [Settings](/jevx/reference/settings/) |
+| `memory add\|index\|check\|show\|list` | a folder of cited markdown notes for `ask --memory`: register, index, check freshness, preview retrieval | [Memory](/jevx/guides/memory/) |
 | `cache [stat]\|enable\|disable\|ttl DAYS\|dir [PATH]\|clear` | the answer cache: status, switch it on or off, set how long answers live, move it, or delete everything (also `config cache …`) | [Privacy](/jevx/reference/privacy/#the-answer-cache) |
 | `profile list\|add\|use\|remove\|show` | endpoints | [Settings](/jevx/reference/settings/#profiles) |
 
@@ -67,4 +68,4 @@ jevx: usage: jevx hook run EVENT | status | review [N] | enable|disable stop  (p
 
 ## Global flags
 
-Every command takes `--cwd DIR` to run as if from that directory. The asking commands take `--profile`, `--yes`, `--no`, `--min`, `--parallel`, `--context TEXT|@file` and `--no-context`. `ask` and the shortcuts also take `--fresh`: skip the answer cache and refresh what it holds.
+Every command takes `--cwd DIR` to run as if from that directory. The asking commands take `--profile`, `--yes`, `--no`, `--min`, `--parallel`, `--context TEXT|@file` and `--no-context`. `ask` and the shortcuts also take `--fresh`: skip the answer cache and refresh what it holds. `ask` takes `--memory NAME`, `--memory-k`, `--memory-budget` and `--memory-strict` ([Memory](/jevx/guides/memory/)).

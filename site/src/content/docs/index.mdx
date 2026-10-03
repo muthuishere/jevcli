@@ -43,6 +43,9 @@ yes 0.96
 	<Card title="Your instructions are the context" icon="open-book">
 		It reads the `## Jev` section of the AGENTS.md / CLAUDE.md you already keep. Nothing new to maintain.
 	</Card>
+	<Card title="Judge against your own notes" icon="document">
+		`--memory` sends the best-matching sections of your docs after the item: a 0.4B local model went from AUC 0.30 to 0.86 on 68 held-out claims. `--memory-strict` catches changed numbers (40 of 40).
+	</Card>
 	<Card title="Repeat calls are free" icon="rocket">
 		Answers are kept on your machine, keyed by a hash, so asking the same thing again returns in milliseconds and costs nothing. On by default; `--fresh` asks again.
 	</Card>
