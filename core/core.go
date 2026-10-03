@@ -313,6 +313,7 @@ func (c Config) Profile(name string) (string, Profile, error) {
 	if name == "" || (name == "default" && c.Profiles["default"].URL == "") {
 		name = BuiltinName
 	}
+	ActiveProfile = name
 	p, ok := c.Profiles[name]
 	if !ok && name == BuiltinName {
 		return name, BuiltinProfile, nil
@@ -636,7 +637,16 @@ func AskRaw(p Profile, state string, qs map[string]any, timeout time.Duration) (
 		return nil, nil, ErrNeedKey
 	}
 	p = p.Expanded()
-	body, _ := json.Marshal(map[string]any{"model": p.Model, "state": state, "questions": qs})
+	// Before any HOSTED call, scrub secrets, emails and phones from the state and question text (CEO 2026-10-03).
+	redacted := 0
+	sendState, sendQs := state, qs
+	if Hosted(p) {
+		var n1, n2 int
+		sendState, n1 = Scrub(state)
+		sendQs, n2 = redactQuestions(qs)
+		redacted = n1 + n2
+	}
+	body, _ := json.Marshal(map[string]any{"model": p.Model, "state": sendState, "questions": sendQs})
 	t0 := time.Now()
 	var raw []byte
 	var err error
@@ -662,7 +672,7 @@ func AskRaw(p Profile, state string, qs map[string]any, timeout time.Duration) (
 			err = validate(qs, out.Answers)
 		}
 	}
-	ledger(p, qs, out.Model, out.Usage, time.Since(t0), err)
+	ledger(p, qs, out.Model, out.Usage, time.Since(t0), err, redacted)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -725,9 +735,10 @@ func validate(qs map[string]any, ans map[string]Answer) error {
 	return nil
 }
 
-// ledger appends one JSON line per call to ~/.local/share/jevx/calls.jsonl: host, model, question count and hash,
-// tokens, latency, error. Never the state, the question text or a header. JEVX_LEDGER=off disables it.
-func ledger(p Profile, qs map[string]any, model string, usage map[string]any, d time.Duration, err error) {
+// ledger appends one JSON line per call to ~/.local/share/jevx/calls.jsonl: profile, caller (the calling agent's cwd,
+// or JEVX_CALLER), host, hosted, model, question count and hash, tokens, latency, how many items were redacted, error.
+// Never the state, the question text or a header. JEVX_LEDGER=off disables it.
+func ledger(p Profile, qs map[string]any, model string, usage map[string]any, d time.Duration, err error, redacted int) {
 	if !LedgerOn || firstEnv("JEVX_LEDGER", "JEVCLI_LEDGER") == "off" {
 		return
 	}
@@ -738,7 +749,8 @@ func ledger(p Profile, qs map[string]any, model string, usage map[string]any, d 
 	qb, _ := json.Marshal(qs)
 	h := sha256.Sum256(qb)
 	row := map[string]any{"ts": time.Now().UTC().Format(time.RFC3339), "host": host, "model": model, "questions": len(qs),
-		"qhash": hex.EncodeToString(h[:6]), "ms": d.Milliseconds(), "usage": usage}
+		"qhash": hex.EncodeToString(h[:6]), "ms": d.Milliseconds(), "usage": usage,
+		"profile": ActiveProfile, "caller": Caller(), "hosted": Hosted(p), "redacted": redacted}
 	if err != nil {
 		row["error"] = trimErr(err.Error())
 	}
@@ -749,6 +761,20 @@ func ledger(p Profile, qs map[string]any, model string, usage map[string]any, d 
 		_, _ = f.Write(append(b, '\n'))
 		_ = f.Close()
 	}
+}
+
+// ActiveProfile is the name of the profile the last Config.Profile call resolved (for the ledger).
+var ActiveProfile string
+
+// Caller identifies who is asking, for spend by agent: JEVX_CALLER if set, else the working directory.
+func Caller() string {
+	if c := firstEnv("JEVX_CALLER"); c != "" {
+		return c
+	}
+	if wd, err := os.Getwd(); err == nil {
+		return wd
+	}
+	return ""
 }
 
 func trimErr(s string) string {
